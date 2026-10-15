@@ -1,6 +1,6 @@
 # Hasta Takip
 
-Hasta randevularını ve kalp cerrahisi kayıtlarını takip etmek için basit, tek dosyalık bir uygulama.
+Hasta randevularını, kalp cerrahisi kayıtlarını ve cerrah icap takvimini takip etmek için basit, tek dosyalık bir uygulama.
 
 ## Nasıl açılır?
 `randevu.html` dosyasını bilgisayarınıza indirin ve çift tıklayın. Chrome, Edge, Safari veya Firefox'ta açılır.
@@ -28,12 +28,20 @@ Hasta randevularını ve kalp cerrahisi kayıtlarını takip etmek için basit, 
 - Türe göre filtreleme, arama, özet sayılar (mortalite dahil)
 - **Excel'e aktar** ile tüm ameliyatları tablo olarak indirme
 
+### İcap Takvimi
+- İki cerrah **birer hafta arayla** dönüşümlü icapçı olur
+- Ayarlar: iki cerrahın adı, ilk icap haftasının başlangıç günü, ilk haftanın icapçısı ve devir saati (varsayılan 08:00)
+- "Bugünün icapçısı" ve bir sonraki devrin ne zaman olacağı en üstte görünür
+- Aylık renkli takvim; bir güne dokunarak o günü diğer cerraha verebilirsiniz (izin / nöbet değişimi), tekrar dokununca geri alınır
+- Önümüzdeki 12 haftanın listesi, yazdırılabilir
+- **Takvime aktar (.ics):** 12 aylık icap planını telefon, Outlook veya Google Takvim'e eklenebilir dosya olarak indirme
+
 ## Veriler nerede saklanır?
 Veriler **yalnızca kullandığınız bilgisayarın tarayıcısında** saklanır. Hiçbir sunucuya gönderilmez.
 Bu yüzden:
 - Başka bir bilgisayarda ya da tarayıcıda açarsanız randevular görünmez.
 - Tarayıcı geçmişini/site verilerini silerseniz randevular silinir.
 - **Düzenli olarak "Yedek al" butonuna basın.** Oluşan `.json` dosyasını saklayın.
-  Yedek hem randevuları hem ameliyatları içerir. Gerekirse "Yedekten yükle" ile geri getirebilirsiniz.
+  Yedek randevuları, ameliyatları ve icap takvimini içerir. Gerekirse "Yedekten yükle" ile geri getirebilirsiniz.
 
 Yedek dosyaları hasta bilgisi içerir. Güvenli bir yerde saklayın.

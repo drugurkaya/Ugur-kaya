@@ -83,14 +83,34 @@
   .dyn-row .x { padding: 6px; line-height: 1; }
   .dyn-row .endart { display: flex; align-items: center; font-size: 13px; color: var(--text); margin: 0; }
   .hint { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+  .c-0 { background: var(--info-bg); color: var(--info); }
+  .c-1 { background: var(--violet-bg); color: var(--violet); }
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal .wd { font-size: 12px; color: var(--muted); text-align: center; padding: 4px 0; }
+  .cal .cd { min-height: 64px; border-radius: 8px; padding: 6px; border: 1px solid transparent; cursor: pointer;
+    font-size: 12px; display: flex; flex-direction: column; justify-content: space-between; text-align: left; }
+  .cal .cd.out { opacity: .4; }
+  .cal .cd.today { border-color: var(--text); }
+  .cal .cd .dn { font-weight: 700; font-size: 14px; }
+  .cal .cd .ov { font-size: 11px; font-weight: 600; }
+  .cal .cd .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .legend span { padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+  .weeks { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .weeks td { padding: 7px 6px; border-bottom: 1px solid var(--border); }
+  .weeks tr.now td { font-weight: 700; }
+  .oncall { font-size: 20px; font-weight: 700; padding: 10px 14px; border-radius: 10px; display: inline-block; }
   @media (max-width: 680px) {
+    .cal .cd { min-height: 52px; padding: 4px; }
+    .cal .cd .who { display: none; }
     .appt, .surg { grid-template-columns: 1fr; }
     .actions { flex-direction: row; flex-wrap: wrap; }
     .dyn-head { display: none; }
     .graft-grid, .valve-grid { grid-template-columns: 1fr 1fr; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
   }
   @media print {
-    header .row, .card.form, .tabs, .toolbar, .actions, .nav { display: none !important; }
+    header .row, .card.form, .tabs, .toolbar, .actions, .nav, .noprint { display: none !important; }
+    .cal .cd, .legend span, .oncall { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body { background: #fff; color: #000; }
   }
 </style>
@@ -110,6 +130,7 @@
   <nav class="nav" id="nav">
     <button data-p="randevu" class="active">Randevular</button>
     <button data-p="ameliyat">Ameliyatlar</button>
+    <button data-p="icap">İcap Takvimi</button>
   </nav>
 
   <!-- ================= RANDEVULAR ================= -->
@@ -274,6 +295,50 @@
 
     <div id="sList"></div>
   </section>
+
+  <!-- ================= İCAP TAKVİMİ ================= -->
+  <section id="p-icap" class="hidden">
+    <div class="card">
+      <div class="meta">Bugünün icapçısı</div>
+      <div id="oToday" class="oncall"></div>
+      <div id="oNext" class="meta" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card form">
+      <h2>Ayarlar</h2>
+      <div class="grid">
+        <div><label for="oName0">1. Cerrah</label><input id="oName0" placeholder="Örn. Dr. Uğur Kaya"></div>
+        <div><label for="oName1">2. Cerrah</label><input id="oName1" placeholder="Örn. Dr. Ayşe Yılmaz"></div>
+        <div><label for="oStart">İlk icap haftası başlangıcı</label><input type="date" id="oStart"></div>
+        <div><label for="oFirst">İlk hafta icapçı</label><select id="oFirst"><option value="0">1. Cerrah</option><option value="1">2. Cerrah</option></select></div>
+        <div><label for="oHour">Devir saati</label><input type="time" id="oHour"></div>
+      </div>
+      <p class="hint" style="margin-top:10px">İcap, başlangıç tarihinden itibaren her 7 günde bir (aynı gün, devir saatinde) diğer cerraha geçer.
+        Takvimde bir güne dokunarak o günü diğer cerraha verebilirsiniz (izin, nöbet değişimi). Tekrar dokununca eski haline döner.</p>
+    </div>
+
+    <div class="card">
+      <div class="row toolbar" style="justify-content:space-between; margin-bottom:10px">
+        <div class="row">
+          <button class="small" id="oPrev" aria-label="Önceki ay">‹</button>
+          <b id="oMonth" style="min-width:140px; text-align:center"></b>
+          <button class="small" id="oNextM" aria-label="Sonraki ay">›</button>
+          <button class="small" id="oThis">Bu ay</button>
+        </div>
+        <div class="row">
+          <select id="oIcsWho" style="width:auto"><option value="all">Her iki cerrah</option><option value="0">1. Cerrah</option><option value="1">2. Cerrah</option></select>
+          <button class="small" id="oIcs" title="Telefon / Outlook / Google Takvim'e eklenebilen dosya (12 ay)">Takvime aktar (.ics)</button>
+        </div>
+      </div>
+      <div class="legend" id="oLegend"></div>
+      <div class="cal" id="oCal"></div>
+    </div>
+
+    <div class="card">
+      <h2>Önümüzdeki haftalar</h2>
+      <table class="weeks" id="oWeeks"></table>
+    </div>
+  </section>
 </div>
 
 <!-- Öneri listeleri -->
@@ -324,7 +389,7 @@ const lower = s => String(s ?? '').toLocaleLowerCase('tr-TR');
 
 /* ---------- Sayfa sekmeleri ---------- */
 function showPage(p) {
-  ['randevu', 'ameliyat'].forEach(x => $('p-' + x).classList.toggle('hidden', x !== p));
+  ['randevu', 'ameliyat', 'icap'].forEach(x => $('p-' + x).classList.toggle('hidden', x !== p));
   [...$('nav').children].forEach(b => b.classList.toggle('active', b.dataset.p === p));
   try { localStorage.setItem('aktifSekme', p); } catch {}
 }
@@ -697,6 +762,104 @@ $('btnCsv').onclick = () => {
   download(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `ameliyatlar-${todayStr()}.csv`);
 };
 
+
+/* =====================================================
+   İCAP TAKVİMİ
+   ===================================================== */
+const OKEY = 'icap_v1';
+function mondayOf(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - (x.getDay() + 6) % 7); return x; }
+function ds(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+// Takvim günleri arasındaki fark (yaz saatinden etkilenmez)
+function dayDiff(a, b) { return Math.round((Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) - Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) / 864e5); }
+let oncall = (() => { try { return JSON.parse(localStorage.getItem(OKEY)); } catch { return null; } })() || {};
+oncall = Object.assign({ names: ['', ''], start: ds(mondayOf(new Date())), first: 0, hour: '08:00', overrides: {} }, oncall);
+const oSave = () => saveKey(OKEY, oncall);
+let oView = new Date(); oView.setDate(1);
+
+const oName = i => oncall.names[i]?.trim() || `${i + 1}. Cerrah`;
+function baseOf(d) {
+  const w = Math.floor(dayDiff(new Date(oncall.start + 'T00:00'), d) / 7);
+  return ((w % 2) + 2) % 2 === 0 ? +oncall.first : 1 - oncall.first;
+}
+function whoOn(d) { const o = oncall.overrides[ds(d)]; return o === undefined ? baseOf(d) : o; }
+// Devir saatinden önce bir önceki günün icapçısı devam eder
+function whoNow() {
+  const n = new Date(), [h, m] = (oncall.hour || '00:00').split(':').map(Number);
+  return whoOn(n.getHours() * 60 + n.getMinutes() < h * 60 + m ? addDays(n, -1) : n);
+}
+
+function oRender() {
+  $('oName0').value = oncall.names[0]; $('oName1').value = oncall.names[1];
+  $('oStart').value = oncall.start; $('oFirst').value = oncall.first; $('oHour').value = oncall.hour;
+  [...$('oFirst').options].forEach((o, i) => o.textContent = oName(i));
+  [...$('oIcsWho').options].slice(1).forEach((o, i) => o.textContent = oName(i));
+
+  const now = whoNow();
+  $('oToday').className = 'oncall c-' + now; $('oToday').textContent = oName(now);
+  // Bir sonraki devir
+  let d = new Date(); d.setHours(0, 0, 0, 0);
+  const cur = whoOn(d); let k = 1;
+  while (k < 400 && whoOn(addDays(d, k)) === cur) k++;
+  const nd = addDays(d, k);
+  $('oNext').textContent = k < 400 ? `${oName(1 - cur)} ${nd.toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' })} saat ${oncall.hour} itibarıyla devralır.` : '';
+
+  $('oLegend').innerHTML = [0, 1].map(i => `<span class="c-${i}">${esc(oName(i))}</span>`).join('');
+  $('oMonth').textContent = oView.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
+  const first = mondayOf(oView), t = todayStr();
+  let h = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map(x => `<div class="wd">${x}</div>`).join('');
+  for (let i = 0; i < 42; i++) {
+    const day = addDays(first, i), key = ds(day);
+    if (i === 35 && day.getMonth() !== oView.getMonth()) break;
+    const w = whoOn(day), ov = oncall.overrides[key] !== undefined;
+    h += `<button class="cd c-${w}${day.getMonth() !== oView.getMonth() ? ' out' : ''}${key === t ? ' today' : ''}" data-d="${key}"
+      title="${esc(oName(w))}${ov ? ' (değişiklik)' : ''} — değiştirmek için dokunun">
+      <span class="dn">${day.getDate()}</span>${ov ? '<span class="ov">↔ değişiklik</span>' : ''}<span class="who">${esc(oName(w))}</span></button>`;
+  }
+  $('oCal').innerHTML = h;
+
+  let rows = '', ws = mondayOf(new Date());
+  for (let i = 0; i < 12; i++) {
+    const a = addDays(ws, i * 7), b = addDays(a, 6), set = new Set();
+    for (let j = 0; j < 7; j++) set.add(whoOn(addDays(a, j)));
+    const names = [...set].map(x => `<span class="badge c-${x}" style="margin:0 6px 0 0">${esc(oName(x))}</span>`).join('');
+    rows += `<tr class="${i === 0 ? 'now' : ''}"><td>${fmtDate(ds(a))} – ${fmtDate(ds(b))}</td><td>${names}${set.size > 1 ? '<span class="meta">(değişiklikli)</span>' : ''}</td></tr>`;
+  }
+  $('oWeeks').innerHTML = rows;
+}
+
+$('oCal').addEventListener('click', e => {
+  const b = e.target.closest('.cd'); if (!b) return;
+  const key = b.dataset.d, day = new Date(key + 'T00:00');
+  if (oncall.overrides[key] !== undefined) delete oncall.overrides[key];
+  else oncall.overrides[key] = 1 - baseOf(day);
+  oSave(); oRender();
+});
+['oName0', 'oName1'].forEach((id, i) => $(id).addEventListener('change', () => { oncall.names[i] = $(id).value.trim(); oSave(); oRender(); }));
+$('oStart').addEventListener('change', () => { if ($('oStart').value) { oncall.start = $('oStart').value; oSave(); oRender(); } });
+$('oFirst').addEventListener('change', () => { oncall.first = +$('oFirst').value; oSave(); oRender(); });
+$('oHour').addEventListener('change', () => { oncall.hour = $('oHour').value || '08:00'; oSave(); oRender(); });
+$('oPrev').onclick = () => { oView.setMonth(oView.getMonth() - 1); oRender(); };
+$('oNextM').onclick = () => { oView.setMonth(oView.getMonth() + 1); oRender(); };
+$('oThis').onclick = () => { oView = new Date(); oView.setDate(1); oRender(); };
+
+$('oIcs').onclick = () => {
+  const who = $('oIcsWho').value, hm = (oncall.hour || '08:00').replace(':', '') + '00';
+  const fmt = d => `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Hasta Takip//Icap//TR', 'CALSCALE:GREGORIAN'];
+  let a = mondayOf(new Date()); const end = addDays(a, 365);
+  while (a < end) {
+    const w = whoOn(a); let b = addDays(a, 1);
+    while (b < end && whoOn(b) === w) b = addDays(b, 1);
+    if (who === 'all' || +who === w) lines.push('BEGIN:VEVENT', `UID:icap-${fmt(a)}-${w}@hasta-takip`, `DTSTAMP:${stamp}`,
+      `DTSTART:${fmt(a)}T${hm}`, `DTEND:${fmt(b)}T${hm}`, `SUMMARY:İcap: ${oName(w)}`, 'TRANSP:TRANSPARENT', 'END:VEVENT');
+    a = b;
+  }
+  lines.push('END:VCALENDAR');
+  download(new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' }), `icap-takvimi-${todayStr()}.ics`);
+};
+
 /* =====================================================
    YEDEK
    ===================================================== */
@@ -706,7 +869,7 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 $('btnExport').onclick = () => {
-  const data = { surum: 2, randevular: items, ameliyatlar: surgeries };
+  const data = { surum: 3, randevular: items, ameliyatlar: surgeries, icap: oncall };
   download(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), `hasta-takip-yedek-${todayStr()}.json`);
 };
 $('btnImport').onclick = () => $('fileImport').click();
@@ -717,13 +880,15 @@ $('fileImport').onchange = async e => {
     // Eski yedekler yalnızca randevu dizisinden oluşur
     const r = Array.isArray(data) ? data : data.randevular;
     const s = Array.isArray(data) ? null : data.ameliyatlar;
-    if (!Array.isArray(r) && !Array.isArray(s)) throw 0;
+    const o = Array.isArray(data) ? null : data.icap;
+    if (!Array.isArray(r) && !Array.isArray(s) && !o) throw 0;
     const msg = `${Array.isArray(r) ? r.length : 0} randevu` + (Array.isArray(s) ? ` ve ${s.length} ameliyat kaydı` : '') +
-      ' yüklenecek. Mevcut kayıtlar bu yedekle değiştirilsin mi?';
+      (o ? ' ve icap takvimi' : '') + ' yüklenecek. Mevcut kayıtlar bu yedekle değiştirilsin mi?';
     if (!confirm(msg)) return;
     if (Array.isArray(r)) { items = r; save(); }
     if (Array.isArray(s)) { surgeries = s; sSave(); }
-    render(); sRender();
+    if (o && typeof o === 'object') { oncall = Object.assign(oncall, o); oSave(); }
+    render(); sRender(); oRender();
   } catch { alert('Dosya okunamadı. Lütfen bu uygulamadan alınmış bir yedek dosyası seçin.'); }
   e.target.value = '';
 };
@@ -732,8 +897,9 @@ resetForm();
 sResetForm();
 render();
 sRender();
-try { const p = localStorage.getItem('aktifSekme'); if (p === 'ameliyat') showPage(p); } catch {}
-setInterval(render, 60000);
+oRender();
+try { const p = localStorage.getItem('aktifSekme'); if (p === 'ameliyat' || p === 'icap') showPage(p); } catch {}
+setInterval(() => { render(); oRender(); }, 60000);
 </script>
 </body>
 </html>
