@@ -9,28 +9,32 @@
     --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #6b7280;
     --border: #e3e6eb; --accent: #2563eb; --accent-text: #ffffff;
     --ok: #15803d; --ok-bg: #dcfce7; --warn: #b45309; --warn-bg: #fef3c7;
-    --bad: #b91c1c; --bad-bg: #fee2e2;
+    --bad: #b91c1c; --bad-bg: #fee2e2; --info: #1d4ed8; --info-bg: #dbeafe;
+    --violet: #6d28d9; --violet-bg: #ede9fe;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #12151b; --card: #1b1f27; --text: #e7e9ee; --muted: #9aa3b2;
       --border: #2c323d; --accent: #3b82f6; --accent-text: #ffffff;
       --ok: #4ade80; --ok-bg: #12301f; --warn: #fbbf24; --warn-bg: #3a2c0c;
-      --bad: #f87171; --bad-bg: #3b1515;
+      --bad: #f87171; --bad-bg: #3b1515; --info: #93c5fd; --info-bg: #172a4a;
+      --violet: #c4b5fd; --violet-bg: #2a1f4a;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
     font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  .wrap { max-width: 920px; margin: 0 auto; padding: 16px; }
-  header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 16px; }
+  header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
   h1 { font-size: 22px; margin: 0; }
   h2 { font-size: 16px; margin: 0 0 12px; }
+  h3 { font-size: 14px; margin: 18px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-  .grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
   label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
   input, select, textarea { width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px;
     background: var(--bg); color: var(--text); font: inherit; }
+  input[type=checkbox] { width: auto; margin: 0 6px 0 0; }
   textarea { resize: vertical; min-height: 60px; }
   button { font: inherit; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--border);
     background: var(--card); color: var(--text); cursor: pointer; }
@@ -38,7 +42,9 @@
   button.small { padding: 5px 9px; font-size: 13px; }
   button:hover { filter: brightness(0.96); }
   .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .tabs button.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .tabs button.active, .nav button.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .nav { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+  .nav button { font-weight: 600; }
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 16px; }
   .stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
   .stat b { display: block; font-size: 24px; }
@@ -46,23 +52,45 @@
   .day { font-weight: 600; margin: 18px 0 8px; color: var(--muted); }
   .appt { display: grid; grid-template-columns: 64px 1fr auto; gap: 12px; align-items: start;
     background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 8px; }
+  .surg { display: grid; grid-template-columns: 96px 1fr auto; gap: 12px; align-items: start;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 8px; }
   .time { font-weight: 700; font-size: 17px; }
+  .sdate { font-weight: 700; font-size: 14px; }
   .name { font-weight: 600; }
   .meta { color: var(--muted); font-size: 13px; }
   .note { font-size: 14px; margin-top: 4px; white-space: pre-wrap; }
+  .line { font-size: 14px; margin-top: 4px; }
+  .line b { font-weight: 600; }
   .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; margin-left: 6px; }
   .b-bekliyor { background: var(--warn-bg); color: var(--warn); }
-  .b-geldi { background: var(--ok-bg); color: var(--ok); }
-  .b-gelmedi, .b-iptal { background: var(--bad-bg); color: var(--bad); }
+  .b-geldi, .b-taburcu { background: var(--ok-bg); color: var(--ok); }
+  .b-gelmedi, .b-iptal, .b-exitus { background: var(--bad-bg); color: var(--bad); }
+  .b-yatiyor { background: var(--warn-bg); color: var(--warn); }
+  .b-cabg { background: var(--info-bg); color: var(--info); }
+  .b-kapak { background: var(--violet-bg); color: var(--violet); }
+  .b-diger { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
   .actions { display: flex; flex-direction: column; gap: 4px; }
   .empty { text-align: center; color: var(--muted); padding: 32px 0; }
-  .hidden { display: none; }
-  @media (max-width: 560px) {
-    .appt { grid-template-columns: 1fr; }
+  .hidden { display: none !important; }
+  .checks { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .checks label { display: flex; align-items: center; color: var(--text); font-size: 14px; margin: 0; cursor: pointer; }
+  .subsec { border: 1px dashed var(--border); border-radius: 10px; padding: 12px; margin-top: 12px; }
+  .subsec h2 { font-size: 15px; margin-bottom: 4px; }
+  .dyn-head, .dyn-row { display: grid; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .graft-grid { grid-template-columns: 1.4fr 1.4fr 1fr 110px 34px; }
+  .valve-grid { grid-template-columns: 1fr 1fr 1.1fr 1.6fr 80px 34px; }
+  .dyn-head { font-size: 12px; color: var(--muted); }
+  .dyn-row .x { padding: 6px; line-height: 1; }
+  .dyn-row .endart { display: flex; align-items: center; font-size: 13px; color: var(--text); margin: 0; }
+  .hint { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+  @media (max-width: 680px) {
+    .appt, .surg { grid-template-columns: 1fr; }
     .actions { flex-direction: row; flex-wrap: wrap; }
+    .dyn-head { display: none; }
+    .graft-grid, .valve-grid { grid-template-columns: 1fr 1fr; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
   }
   @media print {
-    header .row, .card.form, .tabs, .toolbar, .actions { display: none !important; }
+    header .row, .card.form, .tabs, .toolbar, .actions, .nav { display: none !important; }
     body { background: #fff; color: #000; }
   }
 </style>
@@ -70,89 +98,252 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>Randevu Takip</h1>
+    <h1>Hasta Takip</h1>
     <div class="row">
-      <button id="btnExport" title="Tüm randevuları dosyaya kaydet">Yedek al</button>
+      <button id="btnExport" title="Tüm randevu ve ameliyatları dosyaya kaydet">Yedek al</button>
       <button id="btnImport" title="Yedek dosyasından geri yükle">Yedekten yükle</button>
       <button onclick="window.print()">Yazdır</button>
       <input type="file" id="fileImport" accept=".json,application/json" class="hidden">
     </div>
   </header>
 
-  <div class="stats">
-    <div class="stat"><b id="sToday">0</b><span>Bugünkü randevu</span></div>
-    <div class="stat"><b id="sUpcoming">0</b><span>Yaklaşan (bekleyen)</span></div>
-    <div class="stat"><b id="sDone">0</b><span>Bu ay gelen hasta</span></div>
-    <div class="stat"><b id="sMissed">0</b><span>Bu ay gelmeyen</span></div>
-  </div>
+  <nav class="nav" id="nav">
+    <button data-p="randevu" class="active">Randevular</button>
+    <button data-p="ameliyat">Ameliyatlar</button>
+  </nav>
 
-  <div class="card form">
-    <h2 id="formTitle">Yeni randevu</h2>
-    <form id="form">
-      <div class="grid">
-        <div><label for="fName">Hasta adı soyadı *</label><input id="fName" required></div>
-        <div><label for="fPhone">Telefon</label><input id="fPhone" type="tel" placeholder="05xx xxx xx xx"></div>
-        <div><label for="fDate">Tarih *</label><input id="fDate" type="date" required></div>
-        <div><label for="fTime">Saat *</label><input id="fTime" type="time" required></div>
-        <div><label for="fType">Randevu türü</label>
-          <select id="fType">
-            <option>Muayene</option><option>Kontrol</option><option>Tahlil sonucu</option>
-            <option>İşlem</option><option>Diğer</option>
-          </select>
-        </div>
-        <div><label for="fStatus">Durum</label>
-          <select id="fStatus">
-            <option value="bekliyor">Bekliyor</option><option value="geldi">Geldi</option>
-            <option value="gelmedi">Gelmedi</option><option value="iptal">İptal</option>
-          </select>
-        </div>
-      </div>
-      <div style="margin-top:10px"><label for="fNote">Not</label><textarea id="fNote" placeholder="Şikayet, hatırlatma vb."></textarea></div>
-      <div class="row" style="margin-top:12px">
-        <button class="primary" type="submit" id="btnSave">Kaydet</button>
-        <button type="button" id="btnCancel" class="hidden">Vazgeç</button>
-        <span id="clash" class="meta"></span>
-      </div>
-    </form>
-  </div>
-
-  <div class="row toolbar" style="justify-content:space-between; margin-bottom:8px">
-    <div class="row tabs" id="tabs">
-      <button data-f="today" class="active">Bugün</button>
-      <button data-f="upcoming">Yaklaşan</button>
-      <button data-f="past">Geçmiş</button>
-      <button data-f="all">Tümü</button>
+  <!-- ================= RANDEVULAR ================= -->
+  <section id="p-randevu">
+    <div class="stats">
+      <div class="stat"><b id="sToday">0</b><span>Bugünkü randevu</span></div>
+      <div class="stat"><b id="sUpcoming">0</b><span>Yaklaşan (bekleyen)</span></div>
+      <div class="stat"><b id="sDone">0</b><span>Bu ay gelen hasta</span></div>
+      <div class="stat"><b id="sMissed">0</b><span>Bu ay gelmeyen</span></div>
     </div>
-    <input id="search" placeholder="Hasta adı veya telefon ara…" style="max-width:260px">
-  </div>
 
-  <div id="list"></div>
+    <div class="card form">
+      <h2 id="formTitle">Yeni randevu</h2>
+      <form id="form">
+        <div class="grid">
+          <div><label for="fName">Hasta adı soyadı *</label><input id="fName" required></div>
+          <div><label for="fPhone">Telefon</label><input id="fPhone" type="tel" placeholder="05xx xxx xx xx"></div>
+          <div><label for="fDate">Tarih *</label><input id="fDate" type="date" required></div>
+          <div><label for="fTime">Saat *</label><input id="fTime" type="time" required></div>
+          <div><label for="fType">Randevu türü</label>
+            <select id="fType">
+              <option>Muayene</option><option>Kontrol</option><option>Tahlil sonucu</option>
+              <option>İşlem</option><option>Diğer</option>
+            </select>
+          </div>
+          <div><label for="fStatus">Durum</label>
+            <select id="fStatus">
+              <option value="bekliyor">Bekliyor</option><option value="geldi">Geldi</option>
+              <option value="gelmedi">Gelmedi</option><option value="iptal">İptal</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:10px"><label for="fNote">Not</label><textarea id="fNote" placeholder="Şikayet, hatırlatma vb."></textarea></div>
+        <div class="row" style="margin-top:12px">
+          <button class="primary" type="submit" id="btnSave">Kaydet</button>
+          <button type="button" id="btnCancel" class="hidden">Vazgeç</button>
+          <span id="clash" class="meta"></span>
+        </div>
+      </form>
+    </div>
+
+    <div class="row toolbar" style="justify-content:space-between; margin-bottom:8px">
+      <div class="row tabs" id="tabs">
+        <button data-f="today" class="active">Bugün</button>
+        <button data-f="upcoming">Yaklaşan</button>
+        <button data-f="past">Geçmiş</button>
+        <button data-f="all">Tümü</button>
+      </div>
+      <input id="search" placeholder="Hasta adı veya telefon ara…" style="max-width:260px">
+    </div>
+
+    <div id="list"></div>
+  </section>
+
+  <!-- ================= AMELİYATLAR ================= -->
+  <section id="p-ameliyat" class="hidden">
+    <div class="stats">
+      <div class="stat"><b id="aTotal">0</b><span>Toplam ameliyat</span></div>
+      <div class="stat"><b id="aYear">0</b><span>Bu yıl</span></div>
+      <div class="stat"><b id="aCabg">0</b><span>Koroner bypass</span></div>
+      <div class="stat"><b id="aValve">0</b><span>Kapak cerrahisi</span></div>
+      <div class="stat"><b id="aMort">–</b><span>Mortalite</span></div>
+    </div>
+
+    <div class="card form">
+      <h2 id="sFormTitle">Yeni ameliyat kaydı</h2>
+      <form id="sForm">
+        <h3>Hasta</h3>
+        <div class="grid">
+          <div><label for="sName">Hasta adı soyadı *</label><input id="sName" required></div>
+          <div><label for="sFileNo">Dosya / protokol no</label><input id="sFileNo"></div>
+          <div><label for="sAge">Yaş</label><input id="sAge" type="number" min="0" max="120"></div>
+          <div><label for="sSex">Cinsiyet</label>
+            <select id="sSex"><option value="">—</option><option>Erkek</option><option>Kadın</option></select></div>
+          <div><label for="sPhone">Telefon</label><input id="sPhone" type="tel"></div>
+          <div><label for="sEf">Preop EF (%)</label><input id="sEf" type="number" min="5" max="90"></div>
+          <div><label for="sEuro">EuroSCORE II (%)</label><input id="sEuro" type="number" step="0.01" min="0"></div>
+        </div>
+
+        <h3>Ameliyat</h3>
+        <div class="grid">
+          <div><label for="sDate">Ameliyat tarihi *</label><input id="sDate" type="date" required></div>
+          <div><label for="sSurgeon">Cerrah</label><input id="sSurgeon" list="dlSurgeon"></div>
+          <div><label for="sUrgency">Aciliyet</label>
+            <select id="sUrgency"><option>Elektif</option><option>Ürgent</option><option>Acil</option><option>Kurtarıcı (salvage)</option></select></div>
+          <div><label for="sApproach">Yaklaşım</label>
+            <select id="sApproach">
+              <option>Median sternotomi</option><option>Mini sternotomi</option>
+              <option>Sağ mini torakotomi</option><option>Sol mini torakotomi (MIDCAB)</option>
+              <option>Re-sternotomi (redo)</option><option>Diğer</option>
+            </select></div>
+          <div><label for="sPump">Pompa</label>
+            <select id="sPump"><option>On-pump (KPB)</option><option>Off-pump</option><option>On-pump atan kalp</option></select></div>
+          <div><label for="sCpb">KPB süresi (dk)</label><input id="sCpb" type="number" min="0"></div>
+          <div><label for="sXclamp">Kros klemp süresi (dk)</label><input id="sXclamp" type="number" min="0"></div>
+        </div>
+        <div style="margin-top:12px">
+          <label>Yapılan işlem(ler) *</label>
+          <div class="checks" id="sTypes">
+            <label><input type="checkbox" value="cabg">Koroner bypass (KABG)</label>
+            <label><input type="checkbox" value="kapak">Kapak cerrahisi</label>
+            <label><input type="checkbox" value="aort">Aort cerrahisi</label>
+            <label><input type="checkbox" value="diger">Diğer</label>
+          </div>
+        </div>
+
+        <div class="subsec hidden" id="cabgSec">
+          <h2>Koroner bypass — greftler</h2>
+          <p class="hint">Her greft için bir satır. Sekansiyel greftte hedefleri tire ile yazın (örn. <b>OM1-OM2</b>).</p>
+          <div class="dyn-head graft-grid"><span>Greft</span><span>Hedef damar(lar)</span><span>Anastomoz şekli</span><span></span><span></span></div>
+          <div id="graftRows"></div>
+          <button type="button" class="small" id="addGraft">+ Greft ekle</button>
+        </div>
+
+        <div class="subsec hidden" id="valveSec">
+          <h2>Kapak cerrahisi</h2>
+          <p class="hint">Her kapak için bir satır. Marka/model listede yoksa elle yazabilirsiniz.</p>
+          <div class="dyn-head valve-grid"><span>Kapak</span><span>İşlem</span><span>Protez tipi</span><span>Marka / model</span><span>Boyut (mm)</span><span></span></div>
+          <div id="valveRows"></div>
+          <button type="button" class="small" id="addValve">+ Kapak ekle</button>
+        </div>
+
+        <div class="subsec hidden" id="otherSec">
+          <label for="sOtherProc">Aort / diğer işlem detayı</label>
+          <input id="sOtherProc" placeholder="örn. Asendan aort replasmanı (Bentall), ASD kapatma, Maze…">
+        </div>
+
+        <h3>Postoperatif</h3>
+        <div class="grid">
+          <div><label for="sIcu">Yoğun bakım (gün)</label><input id="sIcu" type="number" min="0" step="0.5"></div>
+          <div><label for="sLos">Hastanede kalış (gün)</label><input id="sLos" type="number" min="0"></div>
+          <div><label for="sOutcome">Sonuç</label>
+            <select id="sOutcome"><option value="yatiyor">Yatıyor</option><option value="taburcu">Taburcu</option><option value="exitus">Exitus</option></select></div>
+        </div>
+        <div style="margin-top:10px">
+          <label>Komplikasyonlar</label>
+          <div class="checks" id="sComps"></div>
+        </div>
+        <div style="margin-top:10px"><label for="sNote">Not</label><textarea id="sNote"></textarea></div>
+
+        <div class="row" style="margin-top:12px">
+          <button class="primary" type="submit" id="sBtnSave">Kaydet</button>
+          <button type="button" id="sBtnCancel" class="hidden">Vazgeç</button>
+          <span id="sErr" class="meta"></span>
+        </div>
+      </form>
+    </div>
+
+    <div class="row toolbar" style="justify-content:space-between; margin-bottom:8px">
+      <div class="row tabs" id="sTabs">
+        <button data-f="all" class="active">Tümü</button>
+        <button data-f="cabg">Bypass</button>
+        <button data-f="kapak">Kapak</button>
+        <button data-f="aort">Aort</button>
+        <button data-f="diger">Diğer</button>
+      </div>
+      <div class="row">
+        <input id="sSearch" placeholder="Hasta, dosya no, greft, kapak ara…" style="max-width:260px">
+        <button id="btnCsv" title="Excel'de açılabilen tablo olarak indir">Excel'e aktar</button>
+      </div>
+    </div>
+
+    <div id="sList"></div>
+  </section>
 </div>
 
-<script>
-const KEY = 'randevular_v1';
-const STATUS = { bekliyor: 'Bekliyor', geldi: 'Geldi', gelmedi: 'Gelmedi', iptal: 'İptal' };
-let items = load();
-let filter = 'today';
-let editingId = null;
+<!-- Öneri listeleri -->
+<datalist id="dlSurgeon"></datalist>
+<datalist id="dlConduit">
+  <option value="LIMA"><option value="RIMA"><option value="Safen ven (SVG)">
+  <option value="Radiyal arter (sol)"><option value="Radiyal arter (sağ)"><option value="Gastroepiploik arter (GEA)">
+  <option value="LIMA-RIMA (Y kompozit)"><option value="LIMA-Radiyal (Y kompozit)">
+</datalist>
+<datalist id="dlTarget">
+  <option value="LAD"><option value="D1"><option value="D2"><option value="RI (intermedier)">
+  <option value="Cx"><option value="OM1"><option value="OM2"><option value="OM3"><option value="PL (Cx)">
+  <option value="RCA"><option value="PDA"><option value="PLV (RCA)"><option value="AM">
+</datalist>
+<datalist id="dlMekanik">
+  <option value="St. Jude Medical Regent"><option value="St. Jude Medical Masters"><option value="On-X">
+  <option value="Carbomedics"><option value="ATS Open Pivot"><option value="Sorin Bicarbon"><option value="Medtronic Hall">
+</datalist>
+<datalist id="dlBiyo">
+  <option value="Carpentier-Edwards Perimount Magna Ease"><option value="Carpentier-Edwards Perimount Mitral">
+  <option value="Edwards Inspiris Resilia"><option value="Edwards Mitris Resilia">
+  <option value="Medtronic Hancock II"><option value="Medtronic Mosaic"><option value="Medtronic Avalus">
+  <option value="Abbott Trifecta GT"><option value="Abbott Epic"><option value="LivaNova Crown PRT"><option value="Mitroflow">
+</datalist>
+<datalist id="dlSutursuz">
+  <option value="LivaNova Perceval"><option value="Edwards Intuity Elite">
+</datalist>
+<datalist id="dlHalka">
+  <option value="Carpentier-Edwards Physio II"><option value="Carpentier-Edwards Physio Tricuspid">
+  <option value="Edwards MC3 (triküspit)"><option value="Medtronic CG Future"><option value="Medtronic Profile 3D">
+  <option value="Medtronic Tri-Ad"><option value="Sorin Memo 3D">
+</datalist>
 
-function load() {
-  try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; }
-}
-function save() {
-  try { localStorage.setItem(KEY, JSON.stringify(items)); }
-  catch { alert('Kayıt yapılamadı. Tarayıcınız veri saklamaya izin vermiyor olabilir.'); }
-}
+<script>
 const $ = id => document.getElementById(id);
 const pad = n => String(n).padStart(2, '0');
 function todayStr() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 function nowTime() { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(ds) { return ds ? new Date(ds + 'T00:00').toLocaleDateString('tr-TR') : ''; }
+function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function loadKey(k) { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } }
+function saveKey(k, v) {
+  try { localStorage.setItem(k, JSON.stringify(v)); }
+  catch { alert('Kayıt yapılamadı. Tarayıcınız veri saklamaya izin vermiyor olabilir.'); }
+}
+const lower = s => String(s ?? '').toLocaleLowerCase('tr-TR');
+
+/* ---------- Sayfa sekmeleri ---------- */
+function showPage(p) {
+  ['randevu', 'ameliyat'].forEach(x => $('p-' + x).classList.toggle('hidden', x !== p));
+  [...$('nav').children].forEach(b => b.classList.toggle('active', b.dataset.p === p));
+  try { localStorage.setItem('aktifSekme', p); } catch {}
+}
+$('nav').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showPage(b.dataset.p); });
+
+/* =====================================================
+   RANDEVULAR
+   ===================================================== */
+const KEY = 'randevular_v1';
+const STATUS = { bekliyor: 'Bekliyor', geldi: 'Geldi', gelmedi: 'Gelmedi', iptal: 'İptal' };
+let items = loadKey(KEY);
+let filter = 'today';
+let editingId = null;
+const save = () => saveKey(KEY, items);
+
 function fmtDay(ds) {
   const d = new Date(ds + 'T00:00');
   const label = d.toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const t = todayStr();
-  if (ds === t) return 'Bugün — ' + label;
+  if (ds === todayStr()) return 'Bugün — ' + label;
   const tm = new Date(); tm.setDate(tm.getDate() + 1);
   if (ds === `${tm.getFullYear()}-${pad(tm.getMonth()+1)}-${pad(tm.getDate())}`) return 'Yarın — ' + label;
   return label;
@@ -182,11 +373,8 @@ $('form').addEventListener('submit', e => {
     type: $('fType').value, status: $('fStatus').value, note: $('fNote').value.trim()
   };
   if (!data.name) return;
-  if (editingId) {
-    Object.assign(items.find(x => x.id === editingId), data);
-  } else {
-    items.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ...data });
-  }
+  if (editingId) Object.assign(items.find(x => x.id === editingId), data);
+  else items.push({ id: newId(), ...data });
   save(); resetForm(); render();
 });
 $('btnCancel').onclick = resetForm;
@@ -227,12 +415,12 @@ function render() {
   $('sDone').textContent = items.filter(x => x.date.startsWith(month) && x.status === 'geldi').length;
   $('sMissed').textContent = items.filter(x => x.date.startsWith(month) && x.status === 'gelmedi').length;
 
-  const q = $('search').value.trim().toLocaleLowerCase('tr-TR');
+  const q = lower($('search').value.trim());
   let list = items.filter(x => {
     if (filter === 'today' && x.date !== t) return false;
     if (filter === 'upcoming' && x.date < t) return false;
     if (filter === 'past' && x.date >= t) return false;
-    if (q && !(x.name.toLocaleLowerCase('tr-TR').includes(q) || x.phone.replace(/\s/g, '').includes(q.replace(/\s/g, '')))) return false;
+    if (q && !(lower(x.name).includes(q) || x.phone.replace(/\s/g, '').includes(q.replace(/\s/g, '')))) return false;
     return true;
   });
   const asc = (a, b) => (a.date + a.time).localeCompare(b.date + b.time);
@@ -265,28 +453,286 @@ function render() {
   $('list').innerHTML = html;
 }
 
-$('btnExport').onclick = () => {
-  const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' });
+/* =====================================================
+   AMELİYATLAR
+   ===================================================== */
+const SKEY = 'ameliyatlar_v1';
+const TYPE_LABEL = { cabg: 'Koroner bypass', kapak: 'Kapak', aort: 'Aort', diger: 'Diğer' };
+const OUTCOME = { yatiyor: 'Yatıyor', taburcu: 'Taburcu', exitus: 'Exitus' };
+const COMPS = ['Kanama revizyonu', 'Yeni atriyal fibrilasyon', 'İnme', 'Perioperatif MI',
+  'Akut böbrek hasarı', 'Diyaliz', 'Uzamış entübasyon (>24 sa)', 'Sternal / derin yara enfeksiyonu',
+  'Pnömoni', 'IABP / ECMO', 'Kalıcı pacemaker'];
+const VALVE_POS = ['Aort', 'Mitral', 'Triküspit', 'Pulmoner'];
+const VALVE_PROC = ['Replasman', 'Tamir (plasti)', 'Annuloplasti', 'Komissurotomi', 'Diğer'];
+const PROSTHESIS = { '': '—', mekanik: 'Mekanik', biyo: 'Biyolojik', sutursuz: 'Sütürsüz / hızlı yerleşim', halka: 'Annuloplasti halkası' };
+const PROS_LIST = { mekanik: 'dlMekanik', biyo: 'dlBiyo', sutursuz: 'dlSutursuz', halka: 'dlHalka' };
+const GRAFT_CFG = ['Tek', 'Sekansiyel', 'Kompozit (Y/T)'];
+
+let surgeries = loadKey(SKEY);
+let sFilter = 'all';
+let sEditingId = null;
+const sSave = () => saveKey(SKEY, surgeries);
+
+$('sComps').innerHTML = COMPS.map(c => `<label><input type="checkbox" value="${esc(c)}">${esc(c)}</label>`).join('');
+const opts = (arr, sel) => arr.map(v => `<option${v === sel ? ' selected' : ''}>${esc(v)}</option>`).join('');
+
+function addGraftRow(g = {}) {
+  const d = document.createElement('div');
+  d.className = 'dyn-row graft-grid grow';
+  d.innerHTML = `
+    <input class="g-c" list="dlConduit" placeholder="Greft (örn. LIMA)" value="${esc(g.conduit)}">
+    <input class="g-t" list="dlTarget" placeholder="Hedef (örn. LAD)" value="${esc(g.target)}">
+    <select class="g-cfg">${opts(GRAFT_CFG, g.config || 'Tek')}</select>
+    <label class="endart"><input type="checkbox" class="g-e"${g.endart ? ' checked' : ''}>Endarterektomi</label>
+    <button type="button" class="small x" title="Satırı sil" onclick="this.parentElement.remove()">✕</button>`;
+  $('graftRows').appendChild(d);
+}
+function addValveRow(v = {}) {
+  const d = document.createElement('div');
+  d.className = 'dyn-row valve-grid vrow';
+  d.innerHTML = `
+    <select class="v-pos">${opts(VALVE_POS, v.pos || 'Aort')}</select>
+    <select class="v-proc">${opts(VALVE_PROC, v.proc || 'Replasman')}</select>
+    <select class="v-type">${Object.entries(PROSTHESIS).map(([k, l]) => `<option value="${k}"${k === (v.ptype ?? 'mekanik') ? ' selected' : ''}>${l}</option>`).join('')}</select>
+    <input class="v-model" placeholder="Marka / model" value="${esc(v.model)}">
+    <input class="v-size" type="number" min="10" max="40" placeholder="mm" value="${esc(v.size)}">
+    <button type="button" class="small x" title="Satırı sil" onclick="this.parentElement.remove()">✕</button>`;
+  const type = d.querySelector('.v-type'), model = d.querySelector('.v-model'), proc = d.querySelector('.v-proc');
+  const syncList = () => {
+    const l = PROS_LIST[type.value];
+    l ? model.setAttribute('list', l) : model.removeAttribute('list');
+  };
+  type.onchange = syncList;
+  proc.onchange = () => {
+    if (proc.value === 'Annuloplasti' || proc.value === 'Tamir (plasti)') { if (type.value === 'mekanik' || type.value === 'biyo') type.value = 'halka'; }
+    else if (proc.value === 'Replasman' && type.value === 'halka') type.value = 'mekanik';
+    syncList();
+  };
+  syncList();
+  $('valveRows').appendChild(d);
+}
+$('addGraft').onclick = () => addGraftRow();
+$('addValve').onclick = () => addValveRow();
+
+function checkedTypes() { return [...$('sTypes').querySelectorAll('input:checked')].map(i => i.value); }
+function syncSections() {
+  const t = checkedTypes();
+  $('cabgSec').classList.toggle('hidden', !t.includes('cabg'));
+  $('valveSec').classList.toggle('hidden', !t.includes('kapak'));
+  $('otherSec').classList.toggle('hidden', !(t.includes('aort') || t.includes('diger')));
+  if (t.includes('cabg') && !$('graftRows').children.length) addGraftRow({ conduit: 'LIMA', target: 'LAD' });
+  if (t.includes('kapak') && !$('valveRows').children.length) addValveRow();
+}
+$('sTypes').addEventListener('change', syncSections);
+
+function refreshSurgeonList() {
+  const names = [...new Set(surgeries.map(s => s.surgeon).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
+  $('dlSurgeon').innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
+}
+
+function sResetForm() {
+  sEditingId = null;
+  $('sForm').reset();
+  $('graftRows').innerHTML = ''; $('valveRows').innerHTML = '';
+  $('sDate').value = todayStr();
+  $('sFormTitle').textContent = 'Yeni ameliyat kaydı';
+  $('sBtnSave').textContent = 'Kaydet';
+  $('sBtnCancel').classList.add('hidden');
+  $('sErr').textContent = '';
+  syncSections();
+}
+
+const num = id => { const v = $(id).value; return v === '' ? '' : Number(v); };
+$('sForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const types = checkedTypes();
+  if (!types.length) { $('sErr').textContent = '⚠ En az bir işlem türü seçin.'; return; }
+  const grafts = types.includes('cabg') ? [...$('graftRows').children].map(r => ({
+    conduit: r.querySelector('.g-c').value.trim(), target: r.querySelector('.g-t').value.trim(),
+    config: r.querySelector('.g-cfg').value, endart: r.querySelector('.g-e').checked
+  })).filter(g => g.conduit || g.target) : [];
+  const valves = types.includes('kapak') ? [...$('valveRows').children].map(r => ({
+    pos: r.querySelector('.v-pos').value, proc: r.querySelector('.v-proc').value,
+    ptype: r.querySelector('.v-type').value, model: r.querySelector('.v-model').value.trim(),
+    size: r.querySelector('.v-size').value
+  })) : [];
+  const data = {
+    name: $('sName').value.trim(), fileNo: $('sFileNo').value.trim(), age: num('sAge'), sex: $('sSex').value,
+    phone: $('sPhone').value.trim(), ef: num('sEf'), euro: num('sEuro'),
+    date: $('sDate').value, surgeon: $('sSurgeon').value.trim(), urgency: $('sUrgency').value,
+    approach: $('sApproach').value, pump: $('sPump').value, cpb: num('sCpb'), xclamp: num('sXclamp'),
+    types, grafts, valves, otherProc: (types.includes('aort') || types.includes('diger')) ? $('sOtherProc').value.trim() : '',
+    icu: num('sIcu'), los: num('sLos'), outcome: $('sOutcome').value,
+    comps: [...$('sComps').querySelectorAll('input:checked')].map(i => i.value),
+    note: $('sNote').value.trim()
+  };
+  if (!data.name) return;
+  if (sEditingId) Object.assign(surgeries.find(x => x.id === sEditingId), data);
+  else surgeries.push({ id: newId(), ...data });
+  sSave(); sResetForm(); sRender();
+});
+$('sBtnCancel').onclick = sResetForm;
+
+function sEdit(id) {
+  const x = surgeries.find(i => i.id === id); if (!x) return;
+  sResetForm();
+  sEditingId = id;
+  const set = (k, v) => { $(k).value = v ?? ''; };
+  set('sName', x.name); set('sFileNo', x.fileNo); set('sAge', x.age); set('sSex', x.sex); set('sPhone', x.phone);
+  set('sEf', x.ef); set('sEuro', x.euro); set('sDate', x.date); set('sSurgeon', x.surgeon);
+  set('sUrgency', x.urgency); set('sApproach', x.approach); set('sPump', x.pump);
+  set('sCpb', x.cpb); set('sXclamp', x.xclamp); set('sOtherProc', x.otherProc);
+  set('sIcu', x.icu); set('sLos', x.los); set('sOutcome', x.outcome); set('sNote', x.note);
+  $('sTypes').querySelectorAll('input').forEach(i => { i.checked = x.types.includes(i.value); });
+  $('sComps').querySelectorAll('input').forEach(i => { i.checked = (x.comps || []).includes(i.value); });
+  x.grafts.forEach(addGraftRow);
+  x.valves.forEach(addValveRow);
+  syncSections();
+  $('sFormTitle').textContent = 'Ameliyat kaydını düzenle';
+  $('sBtnSave').textContent = 'Güncelle';
+  $('sBtnCancel').classList.remove('hidden');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function sDel(id) {
+  const x = surgeries.find(i => i.id === id);
+  if (x && confirm(`${x.name} adlı hastanın ameliyat kaydı silinsin mi?`)) {
+    surgeries = surgeries.filter(i => i.id !== id); sSave(); sRender();
+  }
+}
+
+/* Özet metinleri */
+function distalCount(s) {
+  return s.grafts.reduce((n, g) => n + Math.max(1, g.target.split(/[-–,+/→]+/).filter(t => t.trim()).length), 0);
+}
+function graftText(g) {
+  let t = `${g.conduit || '?'} → ${g.target || '?'}`;
+  if (g.config && g.config !== 'Tek') t += ` (${lower(g.config)})`;
+  if (g.endart) t += ' + endarterektomi';
+  return t;
+}
+function valveText(v) {
+  const parts = [`${v.pos} ${lower(v.proc)}`];
+  const pr = [v.ptype ? PROSTHESIS[v.ptype] : '', v.model, v.size ? v.size + ' mm' : ''].filter(Boolean).join(' ');
+  return pr ? `${parts[0]} — ${pr}` : parts[0];
+}
+
+$('sTabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  sFilter = b.dataset.f;
+  [...$('sTabs').children].forEach(x => x.classList.toggle('active', x === b));
+  sRender();
+});
+$('sSearch').addEventListener('input', sRender);
+
+function sRender() {
+  refreshSurgeonList();
+  const year = todayStr().slice(0, 4);
+  const closed = surgeries.filter(s => s.outcome !== 'yatiyor');
+  const dead = closed.filter(s => s.outcome === 'exitus').length;
+  $('aTotal').textContent = surgeries.length;
+  $('aYear').textContent = surgeries.filter(s => s.date.startsWith(year)).length;
+  $('aCabg').textContent = surgeries.filter(s => s.types.includes('cabg')).length;
+  $('aValve').textContent = surgeries.filter(s => s.types.includes('kapak')).length;
+  $('aMort').textContent = closed.length ? `%${(100 * dead / closed.length).toFixed(1)} (${dead}/${closed.length})` : '–';
+
+  const q = lower($('sSearch').value.trim());
+  const list = surgeries.filter(s => {
+    if (sFilter !== 'all' && !s.types.includes(sFilter)) return false;
+    if (!q) return true;
+    const hay = lower([s.name, s.fileNo, s.surgeon, s.otherProc, s.note,
+      ...s.grafts.map(graftText), ...s.valves.map(valveText)].join(' '));
+    return hay.includes(q);
+  }).sort((a, b) => b.date.localeCompare(a.date));
+
+  if (!list.length) {
+    $('sList').innerHTML = `<div class="empty">${q ? 'Aramaya uygun kayıt bulunamadı.' : 'Henüz ameliyat kaydı yok.'}</div>`;
+    return;
+  }
+  $('sList').innerHTML = list.map(s => {
+    const badges = s.types.map(t => `<span class="badge b-${t === 'cabg' ? 'cabg' : t === 'kapak' ? 'kapak' : 'diger'}">${TYPE_LABEL[t]}</span>`).join('');
+    const who = [s.fileNo && 'No: ' + s.fileNo, s.age !== '' && s.age != null && s.age + ' yaş', s.sex,
+      s.ef !== '' && s.ef != null && 'EF %' + s.ef, s.euro !== '' && s.euro != null && 'EuroSCORE II %' + s.euro].filter(Boolean).join(' · ');
+    const op = [s.urgency, s.approach, s.pump, s.cpb !== '' && s.cpb != null && 'KPB ' + s.cpb + ' dk',
+      s.xclamp !== '' && s.xclamp != null && 'Kros ' + s.xclamp + ' dk', s.surgeon && 'Cerrah: ' + s.surgeon].filter(Boolean).join(' · ');
+    let lines = '';
+    if (s.grafts.length) lines += `<div class="line"><b>KABG ×${distalCount(s)}:</b> ${s.grafts.map(g => esc(graftText(g))).join(', ')}</div>`;
+    s.valves.forEach(v => { lines += `<div class="line"><b>Kapak:</b> ${esc(valveText(v))}</div>`; });
+    if (s.otherProc) lines += `<div class="line"><b>Diğer:</b> ${esc(s.otherProc)}</div>`;
+    const post = [s.icu !== '' && s.icu != null && 'YB ' + s.icu + ' gün', s.los !== '' && s.los != null && 'Yatış ' + s.los + ' gün'].filter(Boolean).join(' · ');
+    if (post || (s.comps && s.comps.length)) lines += `<div class="meta" style="margin-top:4px">${esc(post)}${post && s.comps.length ? ' · ' : ''}${s.comps.length ? 'Komplikasyon: ' + esc(s.comps.join(', ')) : ''}</div>`;
+    return `<div class="surg">
+      <div class="sdate">${esc(fmtDate(s.date))}</div>
+      <div>
+        <div><span class="name">${esc(s.name)}</span>${badges}<span class="badge b-${s.outcome}">${OUTCOME[s.outcome]}</span></div>
+        ${who ? `<div class="meta">${esc(who)}</div>` : ''}
+        ${op ? `<div class="meta">${esc(op)}</div>` : ''}
+        ${lines}
+        ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
+      </div>
+      <div class="actions">
+        <button class="small" onclick="sEdit('${s.id}')">Düzenle</button>
+        <button class="small" onclick="sDel('${s.id}')">Sil</button>
+      </div></div>`;
+  }).join('');
+}
+
+/* Excel (CSV) dışa aktarma */
+$('btnCsv').onclick = () => {
+  if (!surgeries.length) { alert('Aktarılacak ameliyat kaydı yok.'); return; }
+  const cols = [
+    ['Tarih', s => fmtDate(s.date)], ['Hasta', s => s.name], ['Dosya no', s => s.fileNo], ['Yaş', s => s.age],
+    ['Cinsiyet', s => s.sex], ['EF %', s => s.ef], ['EuroSCORE II %', s => s.euro], ['Cerrah', s => s.surgeon],
+    ['Aciliyet', s => s.urgency], ['Yaklaşım', s => s.approach], ['Pompa', s => s.pump],
+    ['KPB (dk)', s => s.cpb], ['Kros klemp (dk)', s => s.xclamp],
+    ['İşlemler', s => s.types.map(t => TYPE_LABEL[t]).join(' + ')],
+    ['Distal anastomoz sayısı', s => s.grafts.length ? distalCount(s) : ''],
+    ['Greftler', s => s.grafts.map(graftText).join(' | ')],
+    ['Kapaklar', s => s.valves.map(valveText).join(' | ')],
+    ['Diğer işlem', s => s.otherProc], ['YB (gün)', s => s.icu], ['Yatış (gün)', s => s.los],
+    ['Komplikasyonlar', s => (s.comps || []).join(' | ')], ['Sonuç', s => OUTCOME[s.outcome]], ['Not', s => s.note]
+  ];
+  const cell = v => { const t = String(v ?? '').replace(/"/g, '""'); return /[";\n]/.test(t) ? `"${t}"` : t; };
+  const rows = [cols.map(c => c[0]), ...[...surgeries].sort((a, b) => a.date.localeCompare(b.date)).map(s => cols.map(c => c[1](s)))];
+  const csv = '﻿' + rows.map(r => r.map(cell).join(';')).join('\r\n');
+  download(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `ameliyatlar-${todayStr()}.csv`);
+};
+
+/* =====================================================
+   YEDEK
+   ===================================================== */
+function download(blob, name) {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `randevu-yedek-${todayStr()}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$('btnExport').onclick = () => {
+  const data = { surum: 2, randevular: items, ameliyatlar: surgeries };
+  download(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), `hasta-takip-yedek-${todayStr()}.json`);
 };
 $('btnImport').onclick = () => $('fileImport').click();
 $('fileImport').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   try {
     const data = JSON.parse(await f.text());
-    if (!Array.isArray(data)) throw 0;
-    if (!confirm(`${data.length} randevu yüklenecek. Mevcut randevular bu yedekle değiştirilsin mi?`)) return;
-    items = data; save(); render();
+    // Eski yedekler yalnızca randevu dizisinden oluşur
+    const r = Array.isArray(data) ? data : data.randevular;
+    const s = Array.isArray(data) ? null : data.ameliyatlar;
+    if (!Array.isArray(r) && !Array.isArray(s)) throw 0;
+    const msg = `${Array.isArray(r) ? r.length : 0} randevu` + (Array.isArray(s) ? ` ve ${s.length} ameliyat kaydı` : '') +
+      ' yüklenecek. Mevcut kayıtlar bu yedekle değiştirilsin mi?';
+    if (!confirm(msg)) return;
+    if (Array.isArray(r)) { items = r; save(); }
+    if (Array.isArray(s)) { surgeries = s; sSave(); }
+    render(); sRender();
   } catch { alert('Dosya okunamadı. Lütfen bu uygulamadan alınmış bir yedek dosyası seçin.'); }
   e.target.value = '';
 };
 
 resetForm();
+sResetForm();
 render();
+sRender();
+try { const p = localStorage.getItem('aktifSekme'); if (p === 'ameliyat') showPage(p); } catch {}
 setInterval(render, 60000);
 </script>
 </body>
