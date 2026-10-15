@@ -37,3 +37,10 @@ Bu yüzden:
   Yedek hem randevuları hem ameliyatları içerir. Gerekirse "Yedekten yükle" ile geri getirebilirsiniz.
 
 Yedek dosyaları hasta bilgisi içerir. Güvenli bir yerde saklayın.
+
+---
+
+# Akıllı Ev (iPhone uygulaması)
+
+`AkilliEv/` klasöründe eWeLink, Xenon Smart (Tuya) ve SmartThings cihazlarını tek panelden yöneten
+iPhone uygulaması bulunur. Kurulum ve hesap bağlama adımları için: [AkilliEv/README.md](AkilliEv/README.md)
