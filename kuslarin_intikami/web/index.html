@@ -1,0 +1,1872 @@
+<title>Kuşların İntikamı</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kuşlar">
+<meta name="theme-color" content="#1b2440">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap">
+<style>
+  /* Tek görünümlü oyun ekranı: tuval ortada, kenarlar gece mavisi. */
+  :root {
+    --letterbox: #1b2440;
+    --ink: #fff8e6;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--letterbox);
+    color: var(--ink);
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas { display: block; position: fixed; inset: 0; touch-action: none; }
+  noscript { display: block; padding: 24px; font: 18px system-ui, sans-serif; }
+</style>
+<canvas id="game" aria-label="Kuşların İntikamı oyunu"></canvas>
+<noscript>Bu oyun için JavaScript gerekir.</noscript>
+<script>
+"use strict";
+/* =====================================================================
+   KUŞLARIN İNTİKAMI — iPhone / tarayıcı sürümü
+   Masaüstü (Python + Pygame) sürümünün HTML5 Canvas + Web Audio uyarlaması.
+   Grafikler ve sesler tamamen kodla üretilir; harici dosya gerekmez.
+   ===================================================================== */
+
+// ------------------------------------------------------------- Sabitler
+const W = 1280, H = 720, FPS_DT = 1 / 60;
+const GROUND_Y = 625, GRAVITY = 900, ROAD_Y = 610, CAR_GROUND = ROAD_Y + 52;
+const OUT = "#281e32", WHITE = "#ffffff";
+const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif";
+const TOUCH = ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
+const UI_GREEN = "#50c86e", UI_BLUE = "#5096ff", UI_ACCENT = "#ff783c", UI_PINK = "#c85a78";
+
+const BT = {
+  blue:   { name: "Mavi Serçe",     points: 10,  size: 17, speed: 190, body: [80,150,255],  belly: "#bee1ff", wing: "#326edc", hop: 0.05, scare: 95, pitch: 2600 },
+  yellow: { name: "Sarı Kanarya",   points: 20,  size: 20, speed: 220, body: [255,215,50],  belly: "#fff5b4", wing: "#ebaa1e", hop: 0.08, scare: 90, pitch: 2200 },
+  red:    { name: "Hızlı Kızılkuş", points: 30,  size: 18, speed: 330, body: [235,60,60],   belly: "#ffbeaa", wing: "#b9232d", hop: 0.22, scare: 80, pitch: 3000 },
+  gold:   { name: "Altın Kuş",      points: 100, size: 16, speed: 380, body: [255,200,30],  belly: "#fff0a0", wing: "#dc9600", hop: 0.35, scare: 70, pitch: 3400 },
+};
+// Dokunmatik ekranda nişan almak biraz daha zor: korkutma alanı ve önizleme biraz daha cömert.
+const TOUCH_SCARE = TOUCH ? 1.12 : 1.0;
+const LEVELS = {
+  1: { name: "Kuşlarla Tanışma", kind: "throw", stones: 25, goal: 12, speedMult: 0.7, maxBirds: 14, spawnEvery: 2.2,
+       weights: { blue: 60, yellow: 30, red: 10, gold: 2 }, flocks: false, revenge: false, preview: 1.0,
+       tip: TOUCH ? "Ekrana bas ve tut, parmağınla nişan al, bırak!" : "Fareye basılı tut, nişan al ve bırak!" },
+  2: { name: "Kuşların Öfkesi", kind: "throw", stones: 32, goal: 22, speedMult: 1.2, maxBirds: 20, spawnEvery: 1.5,
+       weights: { blue: 35, yellow: 35, red: 28, gold: 4 }, flocks: true, revenge: true, preview: 0.5,
+       tip: TOUCH ? "Kuşlar sinirlendi! ◀ ▶ ile kaç, dalan kuşları taşla savuştur." : "Kuşlar sinirlendi! A/D ile kaç, dalan kuşları taşla savuştur." },
+  3: { name: "Büyük Kaçış", kind: "escape", length: 22000,
+       tip: TOUCH ? "GAZ ve FREN ile hızı ayarla, ◀ ▶ ile sür, ZIPLA ile engelleri aş!" : "W hızlan, S yavaşla, A/D ileri-geri, BOŞLUK zıpla!" },
+};
+const LAST_LEVEL = 3;
+const THROW_MIN = 380, THROW_MAX = 1250, CHARGE_TIME = 1.0, COMBO_STEP = 0.5, COMBO_MAX = 6, HIT_BONUS = 15;
+const MAX_HEALTH = 100, PLAYER_SPEED = 300;
+const CAR_MIN = 160, CAR_CRUISE = 340, CAR_MAXS = 680, CAR_ACCEL = 420, CAR_BRAKE = 600, CAR_JUMP = 640, CAR_GRAV = 1700;
+const TREE_COLORS = [["#5ac85a", "#8ce678"], ["#ff82be", "#ffb4dc"], ["#fad23c", "#ffeb82"], ["#a06ee6", "#c8a0fa"]];
+const FLOWER_COLORS = ["#ff5a78", "#ffdc46", "#78a0ff", "#ffffff", "#e678ff", "#ff963c"];
+const SOUND_CATS = { birds: "Kuş Sesleri", sfx: "Efektler", engine: "Motor", music: "Müzik" };
+
+// ------------------------------------------------------------- Yardımcılar
+const TAU = Math.PI * 2;
+const rand = (a, b) => a + Math.random() * (b - a);
+const randi = (a, b) => Math.floor(rand(a, b + 1));
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+const rgb = c => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
+const lerpC = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+const easeOutBack = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2; };
+function weighted(obj) {
+  const keys = Object.keys(obj); let tot = 0; for (const k of keys) tot += obj[k];
+  let r = Math.random() * tot; for (const k of keys) { r -= obj[k]; if (r <= 0) return k; } return keys[0];
+}
+function seeded(seed) {   // Tekrarlanabilir arka planlar için basit rastgele üreteç
+  let a = seed >>> 0;
+  const f = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  f.uniform = (x, y) => x + f() * (y - x);
+  f.int = (x, y) => Math.floor(f.uniform(x, y + 1));
+  f.choice = arr => arr[Math.floor(f() * arr.length)];
+  return f;
+}
+function storeGet(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function storeSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* depolama yoksa önemsiz */ } }
+
+// ------------------------------------------------------------- Çizim yardımcıları
+function circ(g, x, y, r, fill, stroke, lw = 2) {
+  g.beginPath(); g.arc(x, y, Math.max(0.5, r), 0, TAU);
+  if (fill) { g.fillStyle = fill; g.fill(); }
+  if (stroke) { g.lineWidth = lw; g.strokeStyle = stroke; g.stroke(); }
+}
+function ell(g, x, y, rx, ry, rot, fill, stroke, lw = 2) {
+  g.beginPath(); g.ellipse(x, y, Math.max(0.5, rx), Math.max(0.5, ry), rot, 0, TAU);
+  if (fill) { g.fillStyle = fill; g.fill(); }
+  if (stroke) { g.lineWidth = lw; g.strokeStyle = stroke; g.stroke(); }
+}
+function poly(g, pts, fill, stroke, lw = 2) {
+  g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+  g.closePath();
+  if (fill) { g.fillStyle = fill; g.fill(); }
+  if (stroke) { g.lineJoin = "round"; g.lineWidth = lw; g.strokeStyle = stroke; g.stroke(); }
+}
+function line(g, x1, y1, x2, y2, color, lw, cap = "round") {
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2);
+  g.lineCap = cap; g.lineWidth = lw; g.strokeStyle = color; g.stroke();
+}
+function rrect(g, x, y, w, h, r, fill, stroke, lw = 2) {
+  g.beginPath();
+  if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h);
+  if (fill) { g.fillStyle = fill; g.fill(); }
+  if (stroke) { g.lineWidth = lw; g.strokeStyle = stroke; g.stroke(); }
+}
+function txt(g, s, x, y, size, color, o = {}) {
+  g.font = `${o.w || 600} ${size}px ${FONT}`;
+  g.textAlign = o.align || "center";
+  g.textBaseline = o.base || "middle";
+  const ol = o.ol === undefined ? Math.max(2, size / 10) : o.ol;
+  if (ol) { g.lineJoin = "round"; g.lineWidth = ol * 2; g.strokeStyle = o.oc || OUT; g.strokeText(s, x, y); }
+  g.fillStyle = color; g.fillText(s, x, y);
+}
+function star(g, x, y, r, rot, fill, stroke) {
+  const pts = [];
+  for (let i = 0; i < 10; i++) { const a = rot + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r; pts.push([x + Math.cos(a) * rr, y + Math.sin(a) * rr]); }
+  poly(g, pts, fill, stroke, 1.5);
+}
+// Ekran dışı katmanlar (arka plan) yüksek çözünürlükte bir kez çizilir
+let LAYER_K = 1;
+function layer(w, h, draw) {
+  const c = document.createElement("canvas");
+  c.width = Math.ceil(w * LAYER_K); c.height = Math.ceil(h * LAYER_K);
+  const g = c.getContext("2d"); g.scale(LAYER_K, LAYER_K); draw(g);
+  c.lw = w; c.lh = h; return c;
+}
+const blitL = (g, c, x, y) => g.drawImage(c, x, y, c.lw, c.lh);
+
+// =====================================================================
+//  SES: Web Audio ile sentez (kuşlar, efektler, motor, müzik)
+// =====================================================================
+const SR = 22050;
+const Snd = {
+  ctx: null, master: null, cat: {}, on: { birds: true, sfx: true, engine: true, music: true }, muted: false,
+  bufs: {}, catOf: {}, gap: {}, last: {}, musicSrc: null, musicName: null, musicLoop: true,
+  engSrc: null, engGain: null,
+
+  unlock() {
+    if (!this.ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      try { this.ctx = new AC(); } catch (e) { return; }
+      this.master = this.ctx.createGain(); this.master.connect(this.ctx.destination);
+      for (const k of Object.keys(SOUND_CATS)) { const gn = this.ctx.createGain(); gn.connect(this.master); this.cat[k] = gn; }
+      this.cat.music.gain.value = 0.32;
+      this.build();
+      this.apply();
+      // iOS: sessiz bir tampon çalmak sesi açar
+      const b = this.ctx.createBuffer(1, 1, SR), s = this.ctx.createBufferSource(); s.buffer = b; s.connect(this.master); s.start(0);
+      if (this.pendingMusic) { const [n, l] = this.pendingMusic; this.pendingMusic = null; this.music(n, l); }
+    }
+    if (this.ctx.state !== "running") this.ctx.resume().catch(() => {});
+  },
+  buf(arr, vol = 0.8) {
+    const b = this.ctx.createBuffer(1, arr.length, SR), d = b.getChannelData(0);
+    for (let i = 0; i < arr.length; i++) d[i] = clamp(arr[i] * vol, -1, 1);
+    return b;
+  },
+  add(name, cat, variants, vol = 0.8, gap = 0) {
+    this.bufs[name] = variants.map(v => this.buf(v, vol)); this.catOf[name] = cat; this.gap[name] = gap;
+  },
+  build() {
+    const osc = (w, p) => { p -= Math.floor(p); return w === "sine" ? Math.sin(TAU * p) : w === "square" ? (p < 0.5 ? 0.6 : -0.6) : w === "tri" ? 4 * Math.abs(p - 0.5) - 1 : 2 * p - 1; };
+    const sweep = (f0, f1, dur, w = "sine", vr = 0, vd = 0, curve = 1) => {
+      const n = Math.floor(SR * dur), out = new Float32Array(n); let ph = 0;
+      for (let i = 0; i < n; i++) { let f = f0 + (f1 - f0) * Math.pow(i / n, curve); if (vr) f *= 1 + vd * Math.sin(TAU * vr * i / SR); ph += f / SR; out[i] = osc(w, ph); }
+      return out;
+    };
+    const noise = dur => { const n = Math.floor(SR * dur), o = new Float32Array(n); for (let i = 0; i < n; i++) o[i] = Math.random() * 2 - 1; return o; };
+    const lp = (s, a) => { let y = 0; const o = new Float32Array(s.length); for (let i = 0; i < s.length; i++) { y += a * (s[i] - y); o[i] = y; } return o; };
+    const env = (s, att = 0.01, rel = 0.3) => { const n = s.length, a = Math.max(1, att * SR | 0), r = Math.max(1, rel * n | 0); for (let i = 0; i < n; i++) { let g = 1; if (i < a) g = i / a; if (i > n - r) g *= (n - i) / r; s[i] *= g; } return s; };
+    const cat = (...p) => { let n = 0; for (const x of p) n += x.length; const o = new Float32Array(n); let k = 0; for (const x of p) { o.set(x, k); k += x.length; } return o; };
+    const mix = (...p) => { const n = Math.max(...p.map(x => x.length)), o = new Float32Array(n); for (const x of p) for (let i = 0; i < x.length; i++) o[i] += x[i]; return o; };
+    const sil = d => new Float32Array(Math.floor(SR * d));
+    const song = (bpm, tracks, beats, hats) => {
+      const spb = 60 / bpm, n = Math.floor(SR * beats * spb), buf = new Float32Array(n);
+      for (const [w, vol, notes] of tracks) for (const [st, len, m] of notes) {
+        if (m == null) continue;
+        const f = 440 * Math.pow(2, (m - 69) / 12), s0 = Math.floor(st * spb * SR), ln = Math.floor(len * spb * SR), att = Math.floor(0.008 * SR), rel = Math.max(1, ln * 0.35 | 0);
+        let ph = 0;
+        for (let i = 0; i < ln && s0 + i < n; i++) { let g = 1; if (i < att) g = i / att; else if (i > ln - rel) g = (ln - i) / rel; ph += f / SR; buf[s0 + i] += osc(w, ph) * vol * g; }
+      }
+      if (hats) { const [vol, every] = hats, step = every * spb; for (let k = 0; k * step < beats * spb; k++) { const s0 = Math.floor(k * step * SR), ln = Math.floor(0.03 * SR); for (let i = 0; i < ln && s0 + i < n; i++) buf[s0 + i] += (Math.random() * 2 - 1) * vol * (1 - i / ln); } }
+      return buf;
+    };
+    // Kuşlar
+    for (const k of Object.keys(BT)) {
+      const p0 = BT[k].pitch, vars = [];
+      for (let v = 0; v < 3; v++) { const p = p0 * rand(0.9, 1.1); vars.push(cat(env(sweep(p, p * 1.5, 0.07, "sine", 40, 0.05), 0.005, 0.4), sil(0.03), env(sweep(p * 1.3, p * 0.9, 0.08 + 0.02 * v, "sine", 30, 0.06), 0.005, 0.5))); }
+      this.add("chirp_" + k, "birds", vars, 0.35, 0.12);
+    }
+    const flap = () => { const parts = []; for (let i = 0; i < 3; i++) { parts.push(env(lp(noise(0.05), 0.25), 0.005, 0.8)); parts.push(sil(0.03)); } return cat(...parts); };
+    this.add("flap", "birds", [flap(), flap()], 0.5, 0.08);
+    this.add("cry", "birds", [lp(cat(env(sweep(720, 520, 0.45, "saw", 7, 0.06), 0.03, 0.4), sil(0.08), env(sweep(680, 430, 0.6, "saw", 7, 0.08), 0.03, 0.5)), 0.35)], 0.45, 0.3);
+    const hc = env(sweep(900, 1500, 0.15, "square", 12, 0.05), 0.01, 0.3);
+    this.add("help", "birds", [lp(cat(hc, sil(0.05), hc), 0.4)], 0.35, 0.4);
+    this.add("angry", "birds", [lp(env(sweep(500, 300, 0.35, "saw", 25, 0.15), 0.01, 0.4), 0.3)], 0.45, 0.25);
+    // Efektler
+    const whoosh = () => { const n = noise(0.28), o = new Float32Array(n.length); let y = 0; for (let i = 0; i < n.length; i++) { const a = 0.05 + 0.4 * Math.sin(Math.PI * i / n.length); y += a * (n[i] - y); o[i] = y * 1.6; } return env(o, 0.02, 0.4); };
+    this.add("throw", "sfx", [whoosh()], 0.7, 0.05);
+    this.add("hit", "sfx", [mix(env(sweep(420, 110, 0.22, "sine", 0, 0, 0.5), 0.002, 0.7), env(lp(noise(0.03), 0.5), 0.001, 0.9))], 0.9, 0.05);
+    this.add("thud", "sfx", [env(lp(noise(0.08), 0.12), 0.002, 0.8)], 0.8, 0.06);
+    this.add("egg_drop", "sfx", [env(sweep(650, 220, 0.12, "sine", 0, 0, 0.6), 0.003, 0.6)], 0.7, 0.05);
+    const crk = []; for (let i = 0; i < 4; i++) { crk.push(env(noise(0.012), 0.001, 0.9)); crk.push(sil(0.018)); }
+    this.add("egg_crack", "sfx", [cat(...crk, env(lp(noise(0.22), 0.15), 0.005, 0.8))], 0.8, 0.05);
+    this.add("point", "sfx", [lp(env(sweep(880, 1320, 0.09, "square"), 0.003, 0.5), 0.5)], 0.35, 0.04);
+    this.add("combo", "sfx", [lp(cat(...[660, 880, 1100, 1320].map(f => env(sweep(f, f, 0.07, "square"), 0.003, 0.4))), 0.5)], 0.35, 0.2);
+    this.add("click", "sfx", [env(sweep(1200, 800, 0.04, "tri"), 0.002, 0.6)], 0.5, 0.03);
+    this.add("hurt", "sfx", [lp(env(sweep(300, 120, 0.3, "square", 30, 0.1), 0.005, 0.5), 0.4)], 0.6, 0.15);
+    this.add("jump", "sfx", [env(sweep(180, 520, 0.25, "sine", 18, 0.1, 0.6), 0.005, 0.5)], 0.7, 0.1);
+    const hk = env(lp(mix(sweep(392, 392, 0.18, "square"), sweep(494, 494, 0.18, "square")), 0.3), 0.01, 0.2);
+    this.add("honk", "sfx", [cat(hk, sil(0.06), hk)], 0.45, 0.4);
+    this.add("pickup", "sfx", [lp(cat(env(sweep(990, 990, 0.06, "square"), 0.003, 0.3), env(sweep(1480, 1480, 0.12, "square"), 0.003, 0.6)), 0.5)], 0.35, 0.05);
+    this.add("vroom", "engine", [lp(env(sweep(70, 160, 0.6, "saw", 18, 0.15), 0.02, 0.5), 0.2)], 0.7, 0.5);
+    // Motor döngüsü (çalma hızı arabanın hızına göre değişir)
+    const eng = new Float32Array(SR); let p1 = 0, p2 = 0;
+    for (let i = 0; i < SR; i++) { p1 += 48 / SR; p2 += 24 / SR; const putt = 0.6 + 0.4 * Math.sin(TAU * 8 * i / SR); eng[i] = (osc("saw", p1) * 0.6 + osc("square", p2) * 0.5) * putt; }
+    this.add("engine", "engine", [lp(eng, 0.18)], 0.8);
+    // Müzikler
+    const mel = [72, 76, 79, 76, 77, 81, 79, null, 76, 79, 84, 79, 81, 79, 76, null, 74, 77, 81, 77, 79, 77, 76, 74, 72, 76, 79, 76, 72, null, null, null];
+    const bass = [48, 48, 53, 53, 48, 48, 45, 45, 50, 50, 43, 43, 48, 43, 48, 48];
+    this.add("music_calm", "music", [song(126, [["tri", 0.45, mel.map((n, i) => [i * 0.5, 0.45, n])], ["square", 0.18, bass.map((n, i) => [i, 0.9, n])]], 16, [0.05, 1])], 0.7);
+    const bp = [].concat(Array(8).fill(45), Array(8).fill(41), Array(8).fill(43), Array(8).fill(40));
+    const am = [69, 72, 76, 81, 79, 76, 72, 76, 77, 81, 84, 81, 79, 77, 76, 74, 76, 79, 83, 79, 74, 79, 83, 86, 76, 76, 80, 83, 88, 83, 80, 76];
+    this.add("music_action", "music", [song(164, [["square", 0.22, am.map((n, i) => [i * 0.5, 0.42, n])], ["saw", 0.22, bp.map((n, i) => [i * 0.5, 0.4, n + (i % 2 ? 12 : 0)])]], 16, [0.08, 0.5])], 0.7);
+    this.add("music_victory", "music", [song(140, [["square", 0.3, [[0, .25, 72], [.25, .25, 76], [.5, .25, 79], [.75, .75, 84], [1.75, .25, 79], [2, 2, 84]]], ["tri", 0.3, [[.75, .75, 76], [2, 2, 79]]], ["tri", 0.3, [[0, 1.5, 48], [1.75, 2.25, 43]]]], 4.5)], 0.7);
+    const tb = [[392, .42], [370, .42], [349, .42]].map(([f, d]) => env(sweep(f, f * 0.98, d, "saw"), 0.02, 0.3));
+    tb.push(env(sweep(330, 320, 1.3, "saw", 6, 0.03), 0.02, 0.4));
+    this.add("music_gameover", "music", [lp(cat(...tb), 0.15)], 0.8);
+  },
+  play(name, vol = 1) {
+    if (!this.ctx || this.muted) return;
+    const c = this.catOf[name]; if (!c || !this.on[c]) return;
+    const now = performance.now() / 1000;
+    if (now - (this.last[name] || -99) < this.gap[name]) return;
+    this.last[name] = now;
+    const s = this.ctx.createBufferSource(); s.buffer = pick(this.bufs[name]);
+    const gn = this.ctx.createGain(); gn.gain.value = vol; s.connect(gn); gn.connect(this.cat[c]); s.start();
+  },
+  music(name, loop = true) {
+    if (!this.ctx) { this.pendingMusic = [name, loop]; return; }
+    if (name === this.musicName && loop && this.musicSrc) return;
+    this.stopMusic(); this.musicName = name; this.musicLoop = loop;
+    const s = this.ctx.createBufferSource(); s.buffer = this.bufs[name][0]; s.loop = loop; s.connect(this.cat.music); s.start();
+    s.onended = () => { if (this.musicSrc === s) this.musicSrc = null; };
+    this.musicSrc = s;
+  },
+  stopMusic() { if (this.musicSrc) { try { this.musicSrc.stop(); } catch (e) {} this.musicSrc = null; } this.musicName = null; },
+  engine(rate, vol = 1) {   // rate null ise motor susar
+    if (!this.ctx) return;
+    if (!this.engSrc) {
+      this.engGain = this.ctx.createGain(); this.engGain.gain.value = 0; this.engGain.connect(this.cat.engine);
+      this.engSrc = this.ctx.createBufferSource(); this.engSrc.buffer = this.bufs.engine[0]; this.engSrc.loop = true;
+      this.engSrc.connect(this.engGain); this.engSrc.start();
+    }
+    const t = this.ctx.currentTime;
+    this.engGain.gain.setTargetAtTime(rate == null ? 0 : 0.28 * vol, t, 0.05);
+    if (rate != null) this.engSrc.playbackRate.setTargetAtTime(rate, t, 0.08);
+  },
+  toggle(cat) { this.on[cat] = !this.on[cat]; this.apply(); },
+  toggleMute() { this.muted = !this.muted; this.apply(); },
+  apply() {
+    if (!this.ctx) return;
+    this.master.gain.value = this.muted ? 0 : 1;
+    for (const k of Object.keys(SOUND_CATS)) this.cat[k].gain.value = this.on[k] ? (k === "music" ? 0.32 : 1) : 0;
+  },
+};
+
+// =====================================================================
+//  SAHNE ÇİZİMLERİ: gökyüzü, tepeler, ağaçlar, çiçekler, bulutlar, güneş
+// =====================================================================
+function drawSky(g, h = H) {
+  const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, "#5eb2ff"); gr.addColorStop(1, "#c8ecff");
+  g.fillStyle = gr; g.fillRect(0, 0, W, h);
+}
+function drawHills(g, baseY, rng) {
+  for (const [color, amp, off] of [["#96dc8c", 70, 0], ["#78c873", 45, 90]]) {
+    const ph = rng.uniform(0, 6);
+    g.beginPath(); g.moveTo(0, H);
+    for (let x = 0; x <= W + 40; x += 20) {
+      const y = baseY - off * 0.3 - amp * (0.5 + 0.5 * Math.sin(ph + x / W * TAU * 2)) - amp * 0.3 * Math.sin(x / W * TAU * 5);
+      g.lineTo(x, y);
+    }
+    g.lineTo(W, H); g.closePath(); g.fillStyle = color; g.fill();
+  }
+}
+function drawFlower(g, x, y, color, size) {
+  line(g, x, y, x, y + size * 2, "#3c963c", 2);
+  for (let i = 0; i < 5; i++) { const a = i * TAU / 5; circ(g, x + Math.cos(a) * size * 0.8, y + Math.sin(a) * size * 0.8, size / 2 + 1, color); }
+  circ(g, x, y, Math.max(2, size / 2), "#ffdc3c");
+}
+function drawGround(g, top, rng) {
+  g.fillStyle = "#6ecd5a"; g.fillRect(0, top, W, H - top);
+  g.fillStyle = "#4ea842"; g.fillRect(0, top + 40, W, H - top - 40);
+  line(g, 0, top, W, top, "#46963c", 3, "butt");
+  for (let i = 0; i < W / 6; i++) { const x = rng.int(0, W), y = rng.int(top, H); line(g, x, y, x + rng.int(-3, 3), y - rng.int(5, 11), "#3c8c37", 2); }
+  for (let i = 0; i < W / 25; i++) drawFlower(g, rng.int(5, W - 5), rng.int(top + 8, H - 15), rng.choice(FLOWER_COLORS), rng.int(4, 7));
+}
+function leafCluster(g, cx, cy, r, colors, rng, n) {
+  const blobs = [];
+  for (let i = 0; i < n; i++) blobs.push([cx + rng.uniform(-r * 0.8, r * 0.8), cy + rng.uniform(-r * 0.5, r * 0.5), rng.uniform(r * 0.45, r * 0.7)]);
+  for (const [x, y, rr] of blobs) circ(g, x, y, rr + 3, OUT);
+  for (const [x, y, rr] of blobs) circ(g, x, y, rr, colors[0]);
+  for (const [x, y, rr] of blobs) circ(g, x - rr * 0.25, y - rr * 0.3, rr * 0.45, colors[1]);
+}
+function drawTree(g, x, gy, height, colors, rng, perches) {
+  const trunk = "#825537", top = gy - height;
+  poly(g, [[x - 20, gy + 6], [x - 11, top + 40], [x + 11, top + 40], [x + 20, gy + 6]], trunk, OUT, 3);
+  line(g, x - 4, gy - 10, x - 2, top + 60, "#694128", 3);
+  const tips = [];
+  [top + height * 0.38, top + height * 0.58].forEach((by, i) => {
+    for (const side of [-1, 1]) {
+      if (i === 1 && rng() < 0.15) continue;
+      const len = rng.int(85, 125), sx = x, sy = by + side * 6, ex = x + side * len, ey = by - rng.int(18, 34);
+      line(g, sx, sy, ex, ey, OUT, 14); line(g, sx, sy, ex, ey, trunk, 9);
+      tips.push([ex, ey]);
+      if (perches) for (const t of [0.45, 0.78]) perches.push([sx + (ex - sx) * t, sy + (ey - sy) * t - 4]);
+    }
+  });
+  leafCluster(g, x, top + 20, 75, colors, rng, 9);
+  for (const [ex, ey] of tips) leafCluster(g, ex + rng.int(-6, 6), ey - 6, 22, colors, rng, 3);
+  if (perches) { perches.push([x - 32, top - 32]); perches.push([x + 30, top - 30]); }
+}
+function drawSun(g, x, y, t) {
+  for (let i = 0; i < 12; i++) {
+    const a = t * 0.4 + i * TAU / 12, r2 = 70 + 6 * Math.sin(t * 3 + i);
+    line(g, x + Math.cos(a) * 50, y + Math.sin(a) * 50, x + Math.cos(a) * r2, y + Math.sin(a) * r2, "#ffdc50", 5);
+  }
+  circ(g, x, y, 44, "#ffe146", OUT, 3);
+  circ(g, x - 14, y - 8, 4, OUT); circ(g, x + 14, y - 8, 4, OUT);
+  g.beginPath(); g.arc(x, y + 4, 15, 0.35, Math.PI - 0.35); g.lineWidth = 3; g.strokeStyle = OUT; g.stroke();
+  circ(g, x - 24, y + 6, 6, "#ffa078"); circ(g, x + 24, y + 6, 6, "#ffa078");
+}
+function makeCloud(sc) {
+  const w = 220 * sc, h = 110 * sc;
+  return layer(w, h, g => {
+    const blobs = [[.3, .6, .32], [.5, .42, .4], [.7, .6, .3], [.42, .68, .28], [.6, .68, .28]];
+    for (const [bx, by, br] of blobs) circ(g, w * bx, h * by + 4, h * br, "#d2e1f5");
+    for (const [bx, by, br] of blobs) circ(g, w * bx, h * by, h * br, WHITE);
+  });
+}
+class Clouds {
+  constructor(n = 6) {
+    this.c = [];
+    for (let i = 0; i < n; i++) { const sc = rand(0.6, 1.2); this.c.push({ img: makeCloud(sc), x: rand(0, W), y: rand(30, 260), v: 12 * rand(0.6, 1.4) * sc }); }
+  }
+  update(dt, extra = 0) { for (const c of this.c) { c.x -= (c.v + extra * c.v * 0.05) * dt; if (c.x < -c.img.lw) c.x = W + 20; } }
+  draw(g) { for (const c of this.c) blitL(g, c.img, c.x, c.y); }
+}
+function buildThrowBackground(seed, treeXs) {
+  const rng = seeded(seed), perches = [];
+  const sky = layer(W, H, g => drawSky(g));
+  const colors = TREE_COLORS.slice(); for (let i = colors.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [colors[i], colors[j]] = [colors[j], colors[i]]; }
+  const scene = layer(W, H, g => {
+    drawHills(g, GROUND_Y - 40, rng);
+    treeXs.forEach((tx, i) => drawTree(g, tx, GROUND_Y, rng.int(300, 380), colors[i % 4], rng, perches));
+    drawGround(g, GROUND_Y, rng);
+  });
+  return { sky, scene, perches: perches.filter(p => p[0] > 30 && p[0] < W - 30 && p[1] > 120) };
+}
+function buildRoadLayers(seed) {
+  const rng = seeded(seed);
+  const sky = layer(W, H, g => drawSky(g));
+  const hills = layer(W, H, g => drawHills(g, ROAD_Y - 70, rng));
+  const trees = layer(W, H, g => {
+    let i = 0;
+    for (let x = 80; x < W; x += 210, i++) {
+      const h = rng.int(200, 270), colors = TREE_COLORS[i % 4], s = rng() * 1e9 | 0;
+      for (const dx of [-W, 0, W]) drawTree(g, x + dx, ROAD_Y - 30, h, colors, seeded(s), null);   // kenarlarda kesintisiz
+    }
+  });
+  const road = layer(W, H - ROAD_Y + 40, g => {
+    g.fillStyle = "#6ecd5a"; g.fillRect(0, 0, W, 30);
+    for (let i = 0; i < 40; i++) drawFlower(g, rng.int(5, W - 5), rng.int(4, 18), rng.choice(FLOWER_COLORS), 4);
+    g.fillStyle = "#5f5f6e"; g.fillRect(0, 30, W, H);
+    g.fillStyle = "#4b4b5a"; g.fillRect(0, 30, W, 8);
+    for (let x = 0; x < W; x += 160) rrect(g, x + 20, 75, 80, 8, 4, "#ffeb78");
+    g.fillStyle = "#4ea842"; g.fillRect(0, 118, W, H);
+  });
+  return { sky, hills, trees, road };
+}
+
+// ------------------------------------------------------------- Oyuncu (çocuk)
+const SKIN = "#ffd2aa";
+function drawKid(g, x, y, f = 1, walk = 0, arm = -0.8, holding = false, hurt = 0, yolk = false) {
+  const bob = Math.abs(Math.sin(walk * 2)) * 3;
+  for (const side of [-1, 1]) {
+    const sw = Math.sin(walk * 2 + (side < 0 ? 0 : Math.PI)) * 8;
+    line(g, x + side * 6, y - 28, x + side * 6 + sw, y - 3, OUT, 9);
+    line(g, x + side * 6, y - 28, x + side * 6 + sw, y - 3, "#3c50a0", 6);
+    ell(g, x + side * 6 + sw, y - 2.5, 8, 4.5, 0, OUT);
+  }
+  const by = y - bob;
+  rrect(g, x - 18, by - 62, 36, 40, 11, OUT);
+  rrect(g, x - 16, by - 60, 32, 36, 10, "#ff783c");
+  circ(g, x, by - 42, 6, "#ffe650");
+  const sh = [x - f * 8, by - 52];
+  line(g, sh[0], sh[1], sh[0] - f * 6, sh[1] + 24, OUT, 9); line(g, sh[0], sh[1], sh[0] - f * 6, sh[1] + 24, SKIN, 6);
+  const hx = x, hy = by - 76;
+  circ(g, hx, hy, 18, SKIN, OUT, 2.5);
+  ell(g, hx, hy - 13, 19, 10, 0, "#3c8cff", OUT, 2.5);
+  rrect(g, f > 0 ? hx : hx - 24, hy - 10, 24, 6, 3, "#286edc");
+  const ex = hx + f * 6;
+  if (hurt > 0) {
+    for (const dx of [-5, 5]) { line(g, ex + dx - 3, hy - 3, ex + dx + 3, hy + 3, OUT, 2); line(g, ex + dx - 3, hy + 3, ex + dx + 3, hy - 3, OUT, 2); }
+    circ(g, ex, hy + 9, 4, null, OUT, 2);
+  } else {
+    circ(g, ex - 5, hy - 1, 3, OUT); circ(g, ex + 5, hy - 1, 3, OUT);
+    g.beginPath(); g.arc(ex, hy + 2, 6, 0.4, Math.PI - 0.4); g.lineWidth = 2; g.strokeStyle = OUT; g.stroke();
+  }
+  circ(g, ex - 11 * f, hy + 5, 4, "#ffa096");
+  if (yolk) { ell(g, hx, hy - 19, 16, 7, 0, "#fffaeb"); circ(g, hx, hy - 20, 6, "#ffc31e"); }
+  const s2 = [x + f * 10, by - 52], hand = [s2[0] + Math.cos(arm) * 28, s2[1] + Math.sin(arm) * 28];
+  line(g, s2[0], s2[1], hand[0], hand[1], OUT, 9); line(g, s2[0], s2[1], hand[0], hand[1], SKIN, 6);
+  circ(g, hand[0], hand[1], 5, SKIN, OUT, 2);
+  if (holding) circ(g, hand[0], hand[1], 7, "#9696a5", OUT, 2);
+}
+
+// ------------------------------------------------------------- Araba
+function drawCar(g, x, y, wheel = 0, driver = true, tilt = 0, flash = false, splat = false) {
+  g.save(); g.translate(x, y); if (tilt) g.rotate(tilt);
+  const body = flash ? WHITE : "#eb4146";
+  poly(g, [[-55, -62], [-35, -105], [35, -105], [65, -62]], body, OUT, 3);
+  const win = [[-44, -64], [-29, -97], [28, -97], [53, -64]];
+  poly(g, win, "#aae1ff");
+  if (driver) { circ(g, 8, -76, 13, SKIN, OUT, 2); ell(g, 8, -89, 14, 7, 0, "#3c8cff"); circ(g, 14, -78, 2, OUT); }
+  line(g, 30, -92, 44, -70, "#e6faff", 4);
+  poly(g, win, null, OUT, 2);
+  line(g, -2, -98, -2, -64, OUT, 3);
+  if (splat) { circ(g, 38, -76, 14, "#fffceb"); circ(g, 38, -76, 6, "#ffc31e"); }
+  rrect(g, -113, -69, 226, 52, 20, OUT);
+  rrect(g, -110, -66, 220, 46, 17, body);
+  rrect(g, -95, -60, 170, 8, 4, flash ? WHITE : "#ff8c8c");
+  circ(g, 104, -50, 8, "#fff596", OUT, 2);
+  rrect(g, -112, -54, 8, 12, 3, "#ff5a3c");
+  line(g, -5, -60, -5, -24, OUT, 2);
+  rrect(g, 8, -50, 14, 4, 2, OUT);
+  for (const wx of [-65, 65]) {
+    circ(g, wx, -20, 24, OUT); circ(g, wx, -20, 21, "#3c3c46"); circ(g, wx, -20, 10, "#c8c8d2");
+    for (let k = 0; k < 4; k++) { const a = wheel + k * Math.PI / 2; line(g, wx, -20, wx + Math.cos(a) * 18, -20 + Math.sin(a) * 18, "#787882", 3); }
+  }
+  g.restore();
+}
+function drawStone(g, x, y, r, rot = 0) {
+  ell(g, x, y, r * 1.1, r * 0.9, rot, "#9696a5", OUT, 2);
+  circ(g, x - r * 0.3, y - r * 0.3, r * 0.35, "#bebecd");
+}
+function drawHeart(g, x, y, s, color = "#f0465a") {
+  g.beginPath(); g.moveTo(x, y + s);
+  g.bezierCurveTo(x - s * 1.6, y - s * 0.2, x - s * 0.6, y - s * 1.3, x, y - s * 0.35);
+  g.bezierCurveTo(x + s * 0.6, y - s * 1.3, x + s * 1.6, y - s * 0.2, x, y + s);
+  g.fillStyle = color; g.fill();
+}
+
+// =====================================================================
+//  KUŞ ÇİZİMİ
+// =====================================================================
+function wing(g, px, py, s, f, a, color) {
+  const dx = -f * Math.cos(a), dy = Math.sin(a);
+  ell(g, px + dx * s * 0.6, py + dy * s * 0.6, s * 0.75, s * 0.38, Math.atan2(dy, dx), color, OUT, 2);
+}
+function drawBird(g, kind, x, y, f = 1, flap = 0, flying = false, expr = "normal", look = [0, 0], t = 0, scale = 1, squash = 0, legs = true) {
+  const d = BT[kind], s = d.size * scale, rx = s * (1 + squash * 0.25), ry = s * (1 - squash * 0.25);
+  let bodyC = rgb(d.body);
+  if (kind === "gold") { const k = 0.5 + 0.5 * Math.sin(t * 6); bodyC = rgb([255, 190 + 50 * k, 20 + 80 * k]); }
+  if (legs && !flying) for (const dx of [-0.25, 0.2]) {
+    const lx = x + dx * s * f;
+    line(g, lx, y + s * 0.7, lx, y + s * 1.15, "#f08c1e", 3); line(g, lx, y + s * 1.15, lx + f * 5, y + s * 1.15, "#f08c1e", 2);
+  }
+  poly(g, [[x - f * s * 0.7, y + s * 0.1], [x - f * s * 1.75, y - s * 0.45], [x - f * s * 1.85, y + s * 0.05], [x - f * s * 1.6, y + s * 0.5]], d.wing, OUT, 2);
+  const fa = -0.4 - Math.sin(flap) * 1.0;
+  if (flying) wing(g, x + f * s * 0.15, y - s * 0.2, s, f, fa + 0.35, shade(d.wing));
+  ell(g, x, y, rx, ry, 0, bodyC, OUT, 2.5);
+  ell(g, x + f * rx * 0.22, y + ry * 0.42, rx * 0.55, ry * 0.47, 0, d.belly);
+  if (kind === "red") {
+    for (const [ox, hh] of [[-0.1, 0.7], [0.15, 0.85], [0.38, 0.6]]) { const bx = x + f * s * ox; poly(g, [[bx - 5, y - ry * 0.85], [bx + f * 4, y - ry - s * hh], [bx + 6, y - ry * 0.8]], bodyC, OUT, 2); }
+  } else if (kind === "yellow") {
+    g.beginPath(); g.arc(x + 5, y - ry - 4, 7, Math.PI * 0.9, Math.PI * 1.9); g.lineWidth = 3; g.strokeStyle = OUT; g.stroke();
+  } else if (kind === "gold") {
+    const cx = x + f * s * 0.1, cy = y - ry - 2;
+    poly(g, [[cx - 9, cy], [cx - 9, cy - 10], [cx - 4, cy - 4], [cx, cy - 12], [cx + 4, cy - 4], [cx + 9, cy - 10], [cx + 9, cy]], "#ffe63c", OUT, 2);
+    circ(g, cx, cy - 4, 2, "#ff5078");
+  }
+  wing(g, x - f * s * 0.05, y - s * 0.05, s, f, flying ? fa : 0.55 + Math.sin(flap) * 0.08, d.wing);
+  const e1 = [x + f * s * 0.2, y - s * 0.32], e2 = [x + f * s * 0.62, y - s * 0.36], er = s * 0.3;
+  const bx = x + f * s * 0.95, by = y - s * 0.08;
+  if (expr === "cry") {
+    for (const e of [e1, e2]) { g.beginPath(); g.arc(e[0], e[1] + er * 0.3, er * 0.85, Math.PI + 0.35, TAU - 0.35); g.lineWidth = 3; g.strokeStyle = OUT; g.stroke(); }
+    for (const e of [e1, e2]) {   // Büyük çizgi film gözyaşı şelaleleri
+      const wob = Math.sin(t * 20 + e[0]) * 2, tw = Math.max(4, er * 0.9);
+      rrect(g, e[0] + wob - tw / 2, e[1] + er * 0.4, tw, s * 1.1, 4, "#6ebeff");
+      rrect(g, e[0] + wob - tw / 4, e[1] + er * 0.4 + 2, tw / 2, s * 1.1 - 4, 3, "#c8ebff");
+    }
+  } else if (expr === "blink") {
+    for (const e of [e1, e2]) line(g, e[0] - er * 0.8, e[1], e[0] + er * 0.8, e[1], OUT, 3);
+  } else {
+    const big = expr === "scared" ? 1.25 : 1, pr = expr === "scared" ? 0.32 : 0.55;
+    for (const e of [e1, e2]) {
+      circ(g, e[0], e[1], er * big, WHITE, OUT, 2);
+      const px = e[0] + look[0] * er * 0.45, py = e[1] + look[1] * er * 0.45;
+      circ(g, px, py, Math.max(2, er * pr), OUT); circ(g, px - er * 0.2, py - er * 0.25, Math.max(1, er * 0.2), WHITE);
+    }
+    if (expr === "angry") for (const e of [e1, e2]) line(g, e[0] - f * er, e[1] - er * 1.5, e[0] + f * er, e[1] - er * 0.7, OUT, 4);
+  }
+  if (expr === "cry" || expr === "scared") {
+    poly(g, [[bx - f * s * 0.2, by - s * 0.22], [bx + f * s * 0.45, by - s * 0.3], [bx - f * s * 0.05, by - s * 0.02]], "#ffa028", OUT, 2);
+    poly(g, [[bx - f * s * 0.2, by + s * 0.05], [bx + f * s * 0.35, by + s * 0.3], [bx - f * s * 0.05, by + s * 0.2]], "#f0781e", OUT, 2);
+    circ(g, bx - f * s * 0.1, by + s * 0.02, Math.max(2, s * 0.12), "#962832");
+  } else {
+    poly(g, [[bx - f * s * 0.2, by - s * 0.17], [bx + f * s * 0.42, by], [bx - f * s * 0.2, by + s * 0.17]], "#ffa028", OUT, 2);
+  }
+  circ(g, x + f * s * 0.35, y + s * 0.12, Math.max(2, s * 0.16), "#ff96aa");
+  if (expr === "nervous") { const sx = x - f * s * 0.5, sy = y - s; poly(g, [[sx, sy - 7], [sx - 4, sy + 1], [sx + 4, sy + 1]], "#78c8ff"); circ(g, sx, sy + 1, 4, "#78c8ff"); }
+}
+function shade(hex) {   // Uzaktaki kanat için koyu ton
+  const n = parseInt(hex.slice(1), 16);
+  return rgb([Math.max(0, (n >> 16) - 40), Math.max(0, ((n >> 8) & 255) - 40), Math.max(0, (n & 255) - 40)]);
+}
+function drawBubble(g, text, x, y, color = WHITE) {
+  g.font = `600 17px ${FONT}`;
+  const w = g.measureText(text).width + 18, h = 28;
+  let bx = clamp(x - w / 2, 4, W - w - 4), byy = clamp(y - h - 8, 4, H - h - 4);
+  poly(g, [[x - 7, byy + h - 2], [x + 7, byy + h - 2], [x, byy + h + 10]], OUT);
+  rrect(g, bx - 2, byy - 2, w + 4, h + 4, 11, OUT);
+  rrect(g, bx, byy, w, h, 10, color);
+  poly(g, [[x - 5, byy + h - 3], [x + 5, byy + h - 3], [x, byy + h + 6]], color);
+  txt(g, text, bx + w / 2, byy + h / 2 + 1, 17, OUT, { ol: 0 });
+}
+
+// =====================================================================
+//  EFEKTLER: parçacıklar, uçan yazılar, ekran lekeleri
+// =====================================================================
+class Effects {
+  constructor() { this.p = []; this.texts = []; }
+  add(x, y, vx, vy, color, o = {}) {
+    if (this.p.length > 700) return;
+    this.p.push({ x, y, vx, vy, color, size: o.size || 4, life: o.life || 1, max: o.life || 1, g: o.g || 0, kind: o.kind || "circle", rot: o.rot || 0, vrot: o.vrot || 0, ground: o.ground ?? null });
+  }
+  text(s, x, y, color, size = 28, life = 1.1, rise = 70) { this.texts.push({ s, x, y, color, size, life, max: life, rise }); }
+  feathers(x, y, color, n = 6) { for (let i = 0; i < n; i++) this.add(x, y, rand(-120, 120), rand(-160, -20), color, { size: randi(4, 7), life: rand(0.9, 1.6), g: 220, kind: "feather", rot: rand(0, 6), vrot: rand(-6, 6) }); }
+  stars(x, y, n = 6, color = "#ffe650") { for (let i = 0; i < n; i++) { const a = rand(0, TAU), sp = rand(90, 220); this.add(x, y, Math.cos(a) * sp, Math.sin(a) * sp, color, { size: randi(5, 9), life: 0.6, kind: "star", vrot: 6 }); } }
+  dust(x, y, n = 6, color = "#c8b496") { for (let i = 0; i < n; i++) this.add(x, y, rand(-80, 80), rand(-90, -10), color, { size: randi(4, 8), life: rand(0.4, 0.8), g: 120, kind: "smoke" }); }
+  yolk(x, y, ground) {
+    for (let i = 0; i < 10; i++) this.add(x, y, rand(-160, 160), rand(-260, -60), "#ffc828", { size: randi(3, 6), life: 0.9, g: 900, ground });
+    for (let i = 0; i < 7; i++) this.add(x, y, rand(-140, 140), rand(-280, -80), "#fffaeb", { size: 6, life: 1.2, g: 900, kind: "shell", rot: rand(0, 6), vrot: rand(-10, 10), ground });
+  }
+  update(dt) {
+    for (const p of this.p) {
+      p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vrot * dt;
+      if (p.kind === "feather") { p.vx *= 0.97; p.vy = Math.min(p.vy, 60); p.x += Math.sin(p.life * 6) * 30 * dt; }
+      if (p.ground !== null && p.y > p.ground) { p.y = p.ground; p.vy *= -0.3; p.vx *= 0.6; }
+      p.life -= dt;
+    }
+    this.p = this.p.filter(p => p.life > 0);
+    for (const t of this.texts) { t.life -= dt; t.y -= t.rise * dt; }
+    this.texts = this.texts.filter(t => t.life > 0);
+  }
+  draw(g) {
+    for (const p of this.p) {
+      const k = Math.max(0, p.life / p.max), x = p.x, y = p.y;
+      switch (p.kind) {
+        case "circle": circ(g, x, y, p.size * (0.4 + 0.6 * k), p.color); break;
+        case "smoke": circ(g, x, y, p.size * (1.8 - k), p.color); break;
+        case "tear": { const s = p.size; poly(g, [[x, y - s * 1.6], [x - s, y], [x + s, y]], "#78c8ff"); circ(g, x, y, s, "#78c8ff"); circ(g, x - s / 3, y - s / 3, s / 3, "#e6faff"); break; }
+        case "feather": ell(g, x, y, p.size * 1.6, p.size * 0.6, p.rot, p.color, OUT, 1); break;
+        case "star": star(g, x, y, p.size, p.rot, p.color); break;
+        case "note": circ(g, x, y, p.size, p.color); line(g, x + p.size - 1, y, x + p.size - 1, y - p.size * 3, p.color, 2); line(g, x + p.size - 1, y - p.size * 3, x + p.size + 4, y - p.size * 2, p.color, 2); break;
+        case "shell": { g.save(); g.translate(x, y); g.rotate(p.rot); poly(g, [[0, -p.size], [p.size, p.size / 2], [-p.size, p.size / 2]], "#fffaeb", OUT, 1); g.restore(); break; }
+        case "spark": { const l = p.size * k; line(g, x - l, y, x + l, y, p.color, 2); line(g, x, y - l, x, y + l, p.color, 2); break; }
+      }
+    }
+  }
+  drawTexts(g) {
+    for (const t of this.texts) {
+      const age = t.max - t.life, sc = Math.max(0.1, easeOutBack(Math.min(1, age / 0.25)));
+      g.save(); g.globalAlpha = t.life < 0.35 ? t.life / 0.35 : 1; g.translate(t.x, t.y); g.scale(sc, sc);
+      txt(g, t.s, 0, 0, t.size, t.color); g.restore();
+    }
+  }
+}
+class Splats {   // Ekrana yapışan yumurta lekeleri (görüşü kısa süre kapatır)
+  constructor() { this.s = []; }
+  add(life = 2.6) {
+    const size = randi(90, 150), c = size * 1.5;
+    const img = layer(size * 3, size * 3, g => {
+      for (let i = 0; i < 9; i++) { const a = rand(0, TAU), d = rand(0, size * 0.7); circ(g, c + Math.cos(a) * d, c + Math.sin(a) * d, randi(size / 3, size / 2), "rgba(255,252,235,0.93)"); }
+      for (let i = 0; i < 4; i++) { const dx = randi(-size / 2, size / 2), ln = randi(size / 2, size); line(g, c + dx, c, c + dx, c + ln, "rgba(255,252,235,0.93)", 10); }
+      circ(g, c, c, size / 3, "#ffbe1e"); circ(g, c - size / 10, c - size / 10, size / 9, "#ffe678");
+    });
+    this.s.push({ img, x: randi(200, W - 200), y: randi(140, H - 220), life, max: life });
+  }
+  update(dt) { for (const s of this.s) { s.life -= dt; s.y += 12 * dt; } this.s = this.s.filter(s => s.life > 0); }
+  draw(g) {
+    for (const s of this.s) { g.save(); g.globalAlpha = s.life > 0.8 ? 1 : s.life / 0.8; blitL(g, s.img, s.x - s.img.lw / 2, s.y - s.img.lh / 2); g.restore(); }
+  }
+}
+
+// =====================================================================
+//  OYUN NESNELERİ: taş, yumurta, civciv, kuş, oyuncu, araba
+// =====================================================================
+class Stone {
+  constructor(x, y, vx, vy) { Object.assign(this, { x, y, vx, vy, r: 8, rot: 0, alive: true, flying: true, bounces: 0, rest: 0, scared: 0, resolved: false }); this.touched = new Set(); }
+  update(dt) {
+    let ev = null;
+    this.vy += GRAVITY * dt; this.x += this.vx * dt; this.y += this.vy * dt; this.rot += this.vx * dt * 0.05;
+    if (this.y >= GROUND_Y - this.r) {
+      this.y = GROUND_Y - this.r;
+      if (this.flying) ev = "bounce";
+      this.flying = false;
+      if (Math.abs(this.vy) > 140 && this.bounces < 2) { this.vy *= -0.35; this.vx *= 0.55; this.bounces++; }
+      else { this.vy = 0; this.vx *= 0.8; this.rest += dt; if (this.rest > 1.2) this.alive = false; }
+    }
+    if (this.x < -60 || this.x > W + 60) { this.alive = false; this.flying = false; }
+    return ev;
+  }
+  deflect() { this.vx *= -0.35; this.vy = -Math.abs(this.vy) * 0.3 - 80; }
+  draw(g) { drawStone(g, this.x, this.y, this.r, this.rot); }
+}
+class Egg {
+  constructor(x, y, vx, vy, spot, harmful = false) { Object.assign(this, { x, y, vx, vy, spot, harmful, rot: 0, state: "fall", timer: 0, alive: true }); }
+  update(dt) {
+    if (this.state === "fall") {
+      this.vy += GRAVITY * 0.8 * dt; this.x += this.vx * dt; this.y += this.vy * dt; this.rot += this.vx * dt * 0.02;
+      if (this.y >= GROUND_Y - 12) {
+        this.y = GROUND_Y - 12;
+        if (this.vy > 650 || this.harmful) { this.state = "crack"; return "crack"; }
+        this.state = "roll"; this.vy = 0;
+        if (Math.abs(this.vx) < 60) this.vx = pick([-1, 1]) * rand(90, 170);
+        return "land";
+      }
+    } else if (this.state === "roll") {
+      this.x += this.vx * dt; this.vx *= Math.pow(0.985, dt * 60); this.rot += this.vx * dt / 9;
+      this.y = GROUND_Y - 12 - Math.abs(Math.sin(this.rot * 2)) * 2;
+      if (this.x < 20 || this.x > W - 20) { this.vx *= -1; this.x = clamp(this.x, 20, W - 20); }
+      if (Math.abs(this.vx) < 12) { this.timer += dt; if (this.timer > 0.5) { this.state = "crack"; return "crack"; } }
+    }
+    return null;
+  }
+  draw(g) {
+    ell(g, this.x, this.y, 9, 12, this.rot, "#fffaeb", OUT, 2);
+    for (let k = 0; k < 3; k++) { const a = this.rot + k * 2.1; circ(g, this.x + Math.cos(a) * 4, this.y + Math.sin(a) * 5, 2, this.spot); }
+    if (this.state === "roll" && this.timer > 0) { g.beginPath(); g.moveTo(this.x - 7, this.y); g.lineTo(this.x - 3, this.y - 3); g.lineTo(this.x, this.y + 2); g.lineTo(this.x + 4, this.y - 2); g.lineTo(this.x + 7, this.y); g.lineWidth = 2; g.strokeStyle = OUT; g.stroke(); }
+  }
+}
+class Chick {   // Çatlayan yumurtadan çıkan, kafasında kabukla kaçan civciv
+  constructor(x) { Object.assign(this, { x, dir: pick([-1, 1]), t: 0, alive: true, speed: rand(110, 170) }); }
+  update(dt) { this.t += dt; if (this.t > 0.6) this.x += this.dir * this.speed * dt; if (this.x < -30 || this.x > W + 30) this.alive = false; }
+  draw(g) {
+    const hop = this.t > 0.6 ? Math.abs(Math.sin(this.t * 14)) * 6 : 0, x = this.x, y = GROUND_Y - 10 - hop;
+    line(g, x - 3, y + 7, x - 4, y + 11, "#ff9628", 2); line(g, x + 3, y + 7, x + 4, y + 11, "#ff9628", 2);
+    circ(g, x, y, 9, "#ffeb5a", OUT, 2);
+    const d = this.t > 0.6 ? this.dir : (Math.floor(this.t * 6) % 2 ? 1 : -1);
+    circ(g, x + d * 4, y - 2, 2, OUT);
+    poly(g, [[x + d * 8, y], [x + d * 13, y + 2], [x + d * 8, y + 4]], "#ff9628");
+    poly(g, [[x - 9, y - 5], [x - 6, y - 12], [x - 2, y - 8], [x + 2, y - 13], [x + 6, y - 8], [x + 9, y - 5]], "#fffaeb", OUT, 2);
+  }
+}
+
+const CHAT = ["Cik!", "Cik cik!", "Naber?", "Hey!", "Bak bak!", "Pıt pıt!", "Hı hı!"];
+const HELP = ["İMDAAT!", "Yardım!", "Arkadaşlar!"];
+const ANGRY = ["Grrr!", "İntikam!", "Hücuum!", "Gak!"];
+let BIRD_ID = 0;
+class Bird {
+  constructor(kind, x, y, sm = 1) {
+    this.id = ++BIRD_ID; this.kind = kind; this.d = BT[kind]; this.size = this.d.size; this.points = this.d.points; this.speed = this.d.speed * sm;
+    Object.assign(this, { x, y, vx: 0, vy: 0, state: "flying", st: 0, perch: null, target: [x, y], facing: 1, flap: rand(0, 6), t: rand(0, 10),
+      blinkT: rand(1.5, 4), blink: 0, look: [0, 0], expr: "normal", bubble: null, alive: true, counted: false, hopFrom: null, squash: 0,
+      nervous: 0, tearT: 0, eggLaid: false, helped: false, flockId: null, baseY: y, diveTarget: null, dropped: false, relocT: rand(3, 5) });
+  }
+  perchPos(p) { return [p[0], p[1] - this.size * 1.1]; }
+  say(text, time = 1.4, color = WHITE) { this.bubble = { text, time, color }; }
+  set(state) { this.state = state; this.st = 0; }
+  isTarget() { return ["perched", "hopping", "flying", "flock", "diving", "bomber"].includes(this.state) && !this.counted; }
+  flee(fx) {
+    if (this.state === "fleeing") return;
+    if (fx === undefined) fx = this.x - 1;
+    let dx = this.x >= fx ? 1 : -1; if (this.x > W - 150) dx = 1;
+    this.vx = dx * this.speed * rand(1.4, 1.8); this.vy = -this.speed * rand(1.0, 1.5); this.facing = dx;
+    this.expr = "scared"; this.bubble = null; this.set("fleeing");
+  }
+  stun() { this.set("stunned"); this.expr = "cry"; this.bubble = null; }
+  retreat() { this.vx = this.facing * this.speed * 1.2; this.vy = -this.speed * 1.1; this.expr = "normal"; this.set("retreat"); }
+  update(dt, L) {
+    this.t += dt; this.st += dt; this.squash *= Math.pow(0.85, dt * 60);
+    if (this.bubble) { this.bubble.time -= dt; if (this.bubble.time <= 0) this.bubble = null; }
+    const s = this.state;
+    this["u_" + s](dt, L);
+    if (["fleeing", "retreat", "flock", "bomber"].includes(s) && (this.x < -120 || this.x > W + 120 || this.y < -150)) this.alive = false;
+  }
+  idleFace(dt, L) {
+    this.blinkT -= dt; if (this.blinkT <= 0) { this.blink = 0.13; this.blinkT = rand(1.8, 4.5); }
+    this.blink = Math.max(0, this.blink - dt);
+    const [ax, ay] = L.aimPoint(), dx = ax - this.x, dy = ay - this.y, d = Math.hypot(dx, dy) || 1;
+    this.look = [dx / d, dy / d];
+    if (Math.abs(dx) > 30) this.facing = dx > 0 ? 1 : -1;
+    this.nervous = Math.max(0, this.nervous - dt);
+    this.expr = this.blink > 0 ? "blink" : this.nervous > 0 ? "nervous" : "normal";
+  }
+  u_flying(dt, L) {
+    let [tx, ty] = this.target;
+    if (this.perch !== null) [tx, ty] = this.perchPos(L.perches[this.perch]);
+    const dx = tx - this.x, dy = ty - this.y, d = Math.hypot(dx, dy);
+    this.flap += dt * 22; this.facing = dx >= 0 ? 1 : -1; this.expr = "normal"; this.look = [this.facing, 0.2];
+    const step = this.speed * dt;
+    if (d <= step || d < 4) { this.x = tx; this.y = ty; if (this.perch !== null) { this.set("perched"); this.squash = 1; } else this.flee(); return; }
+    this.x += dx / d * step; this.y += dy / d * step + Math.sin(this.t * 9) * 25 * dt;
+  }
+  u_perched(dt, L) {
+    this.flap += dt * 2; this.idleFace(dt, L);
+    this.y = this.perchPos(L.perches[this.perch])[1] - Math.abs(Math.sin(this.t * 3)) * 1.5;
+    if (Math.random() < 0.10 * dt) {
+      this.say(pick(CHAT), 1.1); Snd.play("chirp_" + this.kind, 0.7);
+      L.fx.add(this.x + this.facing * 10, this.y - this.size, this.facing * 30, -50, this.d.wing, { size: 4, life: 1, kind: "note" });
+    } else if (Math.random() < 0.04 * dt) {
+      const o = L.neighborOf(this, 170);
+      if (o) { this.facing = o.x > this.x ? 1 : -1; o.facing = -this.facing; this.say(pick(CHAT), 1.4); o.say(pick(CHAT), 1.4, "#fff5d2"); Snd.play("chirp_" + o.kind, 0.5); }
+    }
+    let hop = this.d.hop;
+    if (this.kind === "gold") { this.relocT -= dt; if (this.relocT <= 0) { hop = 99; this.relocT = rand(2.5, 4.5); } }
+    if (Math.random() < hop * dt) {
+      const n = L.freePerchNear(this.x, this.y, this.kind === "gold" ? 900 : 260);
+      if (n !== null) {
+        L.perchOwner[this.perch] = null; this.hopFrom = [this.x, this.y]; this.perch = n; L.perchOwner[n] = this;
+        const to = this.perchPos(L.perches[n]);
+        if (dist(this.x, this.y, to[0], to[1]) > 190) this.set("flying"); else { this.set("hopping"); this.squash = 0.8; }
+      }
+    }
+  }
+  u_hopping(dt, L) {
+    const k = Math.min(1, this.st / 0.45), [x0, y0] = this.hopFrom, [x1, y1] = this.perchPos(L.perches[this.perch]);
+    this.x = x0 + (x1 - x0) * k; this.y = y0 + (y1 - y0) * k - Math.sin(k * Math.PI) * 40;
+    this.facing = x1 >= x0 ? 1 : -1; this.flap += dt * 25; this.expr = "normal";
+    if (k >= 1) { this.set("perched"); this.squash = 1; }
+  }
+  u_stunned(dt, L) {
+    this.expr = "cry"; this.flap += dt * 2; this.tearT -= dt;
+    if (this.tearT <= 0) { this.tearT = 0.07; for (const sd of [-1, 1]) L.fx.add(this.x + this.facing * this.size * 0.4, this.y - this.size * 0.2, sd * rand(60, 140), rand(-160, -60), null, { size: 4, life: 0.9, g: 700, kind: "tear" }); }
+    if (this.st > 0.35 && !this.eggLaid) { this.eggLaid = true; L.spawnEgg(this.x, this.y + this.size, this.facing * rand(20, 70), -60, this.d.wing); }
+    if (this.st > 0.9 && !this.helped) {
+      this.helped = true;
+      if (Math.random() < L.helpChance) { this.say(pick(HELP), 1.4, "#ffe6e6"); Snd.play("help"); L.callForHelp(this); }
+    }
+    if (this.st > 2.3) this.flee();
+  }
+  u_fleeing(dt) { this.flap += dt * 30; this.vy -= 120 * dt; this.x += this.vx * dt; this.y += this.vy * dt; }
+  u_flock(dt) { this.flap += dt * 18; this.x += this.vx * dt; this.y = this.baseY + Math.sin(this.t * 2.5) * 18; this.facing = this.vx > 0 ? 1 : -1; this.expr = "normal"; this.look = [this.facing, 0]; }
+  u_diving(dt, L) {
+    this.expr = "angry";
+    const [px, py] = L.playerTarget();
+    if (this.st < 0.7) {
+      this.flap += dt * 30; this.x += Math.sin(this.t * 60) * 1.5; this.facing = px > this.x ? 1 : -1; this.look = [this.facing, 0.6];
+      if (!this.diveTarget) { this.say(pick(ANGRY), 1.0, "#ffd2d2"); Snd.play("angry"); this.diveTarget = [px, py]; }
+      return;
+    }
+    let [tx, ty] = this.diveTarget; tx += (px - tx) * Math.min(1, 1.2 * dt); this.diveTarget = [tx, ty];
+    const dx = tx - this.x, dy = ty - this.y, d = Math.hypot(dx, dy) || 1, sp = this.speed * L.diveSpeed;
+    this.vx = dx / d * sp; this.vy = dy / d * sp; this.x += this.vx * dt; this.y += this.vy * dt; this.flap += dt * 10;
+    this.facing = this.vx >= 0 ? 1 : -1; this.look = [this.vx / sp, this.vy / sp];
+    if (d < 14 || this.y > ty + 10) this.retreat();
+  }
+  u_retreat(dt) { this.flap += dt * 24; this.x += this.vx * dt; this.y += this.vy * dt; }
+  u_bomber(dt, L) {
+    this.flap += dt * 20; this.x += this.vx * dt; this.y = this.baseY + Math.sin(this.t * 4) * 10; this.facing = this.vx > 0 ? 1 : -1; this.expr = "angry";
+    const [px] = L.playerTarget();
+    if (!this.dropped && Math.abs(this.x + this.vx * 0.35 - px) < 25) { this.dropped = true; this.say("Al sana!", 0.9, "#ffd2d2"); L.spawnEgg(this.x, this.y + this.size, this.vx * 0.4, 40, this.d.wing, true); }
+  }
+  draw(g) {
+    const flying = ["flying", "fleeing", "flock", "diving", "retreat", "bomber", "hopping"].includes(this.state);
+    drawBird(g, this.kind, this.x, this.y, this.facing, this.flap, flying, this.expr, this.look, this.t, this.state === "stunned" ? 1.35 : 1, this.squash);
+    if (this.state === "stunned") for (let i = 0; i < 3; i++) { const a = this.t * 5 + i * TAU / 3; star(g, this.x + Math.cos(a) * this.size * 1.3, this.y - this.size * 1.6 + Math.sin(a) * this.size * 0.35, 6, -Math.PI / 2, "#ffe63c", OUT); }
+    if (this.state === "fleeing" && this.st < 0.6) txt(g, "!", this.x, this.y - this.size * 2.2, 28, "#ff5050");
+    if (this.state === "diving" && this.st < 0.7 && Math.floor(this.st * 10) % 2 === 0) txt(g, "!!", this.x, this.y - this.size * 2.4, 30, "#ff3c3c");
+    if (this.bubble) drawBubble(g, this.bubble.text, this.x, this.y - this.size * 1.6, this.bubble.color);
+  }
+}
+
+class Player {
+  constructor(x) { Object.assign(this, { x, facing: 1, walk: 0, arm: -0.9, hurtT: 0, invT: 0, slowT: 0, hidden: false, throwT: 0 }); }
+  get shoulder() { return [this.x + this.facing * 10, GROUND_Y - 54]; }
+  hitbox() { return { x: this.x - 18, y: GROUND_Y - 95, w: 36, h: 95 }; }
+  update(dt, move, aim, charging) {
+    if (this.hurtT > 0) move = 0;
+    this.x = clamp(this.x + move * PLAYER_SPEED * (this.slowT > 0 ? 0.5 : 1) * dt, 50, 460);
+    this.walk = move ? this.walk + dt * 9 : 0;
+    this.hurtT = Math.max(0, this.hurtT - dt); this.invT = Math.max(0, this.invT - dt); this.slowT = Math.max(0, this.slowT - dt); this.throwT = Math.max(0, this.throwT - dt);
+    if (aim[0] > this.x + 5) this.facing = 1; else if (aim[0] < this.x - 5) this.facing = -1;
+    const [sx, sy] = this.shoulder; let a = Math.atan2(aim[1] - sy, aim[0] - sx);
+    if (charging) a += Math.PI * 0.45 * (this.facing > 0 ? -1 : 1);
+    this.arm = a;
+  }
+  draw(g, holding) {
+    if (this.hidden || (this.invT > 0 && Math.floor(this.invT * 12) % 2 === 0)) return;
+    drawKid(g, this.x, GROUND_Y, this.facing, this.walk, this.arm, holding, this.hurtT, this.slowT > 0);
+  }
+}
+const hit = (r, x, y) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+class Car {
+  constructor(x) { Object.assign(this, { x, y: CAR_GROUND, vy: 0, onGround: true, speed: CAR_CRUISE, wheel: 0, tilt: 0, invT: 0, slowT: 0, flashT: 0, splatT: 0, t: 0 }); }
+  maxSpeed() { return CAR_MAXS * (this.slowT > 0 ? 0.6 : 1); }
+  update(dt, c) {
+    this.t += dt; let ev = null;
+    if (c.accel) this.speed += CAR_ACCEL * dt;
+    else if (c.brake) this.speed -= CAR_BRAKE * dt;
+    else this.speed += clamp(CAR_CRUISE - this.speed, -200 * dt, 200 * dt);
+    this.speed = Math.max(CAR_MIN, this.speed);
+    if (this.speed > this.maxSpeed()) this.speed = Math.max(this.maxSpeed(), this.speed - 500 * dt);
+    this.x = clamp(this.x + ((c.right ? 1 : 0) - (c.left ? 1 : 0)) * 330 * dt, 150, 820);
+    if (!this.onGround) {
+      this.vy += CAR_GRAV * dt; this.y += this.vy * dt; this.tilt = clamp(this.vy / 2400, -0.22, 0.22);
+      if (this.y >= CAR_GROUND) { this.y = CAR_GROUND; this.vy = 0; this.onGround = true; this.tilt = 0; ev = "land"; }
+    } else this.tilt = Math.sin(this.t * 30) * 0.008 * (this.speed / CAR_MAXS);
+    this.wheel += this.speed * dt / 21;
+    for (const k of ["invT", "slowT", "flashT", "splatT"]) this[k] = Math.max(0, this[k] - dt);
+    return ev;
+  }
+  jump() { if (this.onGround) { this.onGround = false; this.vy = -CAR_JUMP; return true; } return false; }
+  damage() { this.invT = 1.4; this.flashT = 0.25; this.slowT = 1.2; this.speed = Math.max(CAR_MIN, this.speed * 0.7); }
+  body() { return { x: this.x - 108, y: this.y - 112, w: 216, h: 102 }; }
+  low() { return { x: this.x - 105, y: this.y - 50, w: 210, h: 50 }; }
+  draw(g) {
+    if (this.invT > 0 && Math.floor(this.invT * 14) % 2 === 0 && this.flashT <= 0) return;
+    drawCar(g, this.x, this.y, this.wheel, true, this.tilt, this.flashT > 0, this.splatT > 0);
+  }
+}
+
+// ------------------------------------------------------------- Araba bölümü nesneleri
+class RoadObj {
+  constructor(kind, wx, air = 0) {
+    Object.assign(this, { kind, wx, air, alive: true, hit: false, passed: false, t: rand(0, 10), vx: kind === "egg" ? -70 : 0 });
+    if (kind === "birdblock") {
+      const n = randi(2, 3);
+      this.birds = Array.from({ length: n }, (_, i) => ({ kind: pick(["blue", "yellow", "red"]), dx: i * 42 - (n - 1) * 21, stay: Math.random() < 0.55, fly: false, vy: 0, y: 0 }));
+      if (!this.birds.some(b => b.stay)) this.birds[0].stay = true;
+      this.warned = false;
+    }
+  }
+  rect(cam) {
+    const sx = this.wx - cam, gy = CAR_GROUND;
+    switch (this.kind) {
+      case "rock": return { x: sx - 20, y: gy - 34, w: 40, h: 34 };
+      case "bigrock": return { x: sx - 30, y: gy - 50, w: 60, h: 50 };
+      case "egg": return { x: sx - 10, y: gy - 26, w: 20, h: 26 };
+      case "puddle": return { x: sx - 45, y: gy - 8, w: 90, h: 10 };
+      case "birdblock": {
+        const xs = this.birds.filter(b => b.stay && !b.fly).map(b => b.dx);
+        if (!xs.length) return { x: -999, y: -999, w: 1, h: 1 };
+        return { x: sx + Math.min(...xs) - 18, y: gy - 44, w: Math.max(...xs) - Math.min(...xs) + 36, h: 44 };
+      }
+      case "coin": case "wrench": return { x: sx - 18, y: gy - 36 - this.air - 18, w: 36, h: 36 };
+    }
+    return { x: sx, y: gy, w: 1, h: 1 };
+  }
+  update(dt, cam, carX, fx) {
+    this.t += dt; this.wx += this.vx * dt;
+    const sx = this.wx - cam;
+    if (this.kind === "birdblock") {
+      if (!this.warned && sx - carX < 330) { this.warned = true; Snd.play("angry", 0.6); }
+      for (const b of this.birds) {
+        if (!b.stay && !b.fly && sx + b.dx - carX < 230) { b.fly = true; b.vy = -380; fx.feathers(sx + b.dx, CAR_GROUND - 20, WHITE, 3); Snd.play("flap", 0.5); }
+        if (b.fly) { b.vy -= 200 * dt; b.y += b.vy * dt; }
+      }
+    }
+    if (sx < -200) this.alive = false;
+  }
+  draw(g, cam) {
+    const sx = this.wx - cam, gy = CAR_GROUND, t = this.t;
+    if (sx < -150 || sx > W + 150) return;
+    switch (this.kind) {
+      case "rock": drawStone(g, sx - 8, gy - 12, 14, 0.3); drawStone(g, sx + 8, gy - 14, 16, 1.2); drawStone(g, sx, gy - 26, 12, 2); break;
+      case "bigrock": drawStone(g, sx, gy - 24, 28, 0.5); drawStone(g, sx - 22, gy - 10, 12, 1); line(g, sx - 6, gy - 40, sx + 4, gy - 28, OUT, 2); break;
+      case "egg": { const r = -t * 6; ell(g, sx, gy - 13, 10, 13, r, "#fffaeb", OUT, 2); circ(g, sx + Math.cos(r) * 4, gy - 13 + Math.sin(r) * 5, 3, "#78aaff"); break; }
+      case "puddle": ell(g, sx, gy - 1, 48, 8, 0, "#fffaeb", OUT, 2); ell(g, sx, gy - 1.5, 16, 5.5, 0, "#ffc328"); break;
+      case "birdblock":
+        for (const b of this.birds) drawBird(g, b.kind, sx + b.dx, gy - 22 + b.y - (b.fly ? 0 : Math.abs(Math.sin(t * 5 + b.dx)) * 4), -1, t * (b.fly ? 25 : 3), b.fly, b.fly ? "scared" : "angry", [-1, 0], t);
+        if (!this.warned && sx > 0 && sx < W) drawBubble(g, "Geçemezsin!", sx, gy - 60, "#ffdcdc");
+        break;
+      case "wrench": { const y = gy - 36 - this.air + Math.sin(t * 4) * 5; circ(g, sx, y, 20, "#78dc8c", OUT, 3); line(g, sx - 9, y + 9, sx + 7, y - 7, OUT, 7); line(g, sx - 9, y + 9, sx + 7, y - 7, "#e6e6f0", 4); circ(g, sx + 8, y - 8, 6, "#e6e6f0"); circ(g, sx + 11, y - 11, 3, "#78dc8c"); break; }
+      case "coin": { const y = gy - 36 - this.air + Math.sin(t * 5) * 4, w = Math.abs(Math.cos(t * 3)) * 16 + 4; ell(g, sx, y, w + 2, 18, 0, OUT); ell(g, sx, y, w, 16, 0, "#ffd228"); if (w > 10) star(g, sx, y, 8, -Math.PI / 2, "#fff08c"); break; }
+      case "finish": {
+        for (let i = 0; i < gy; i += 20) { g.fillStyle = (i / 20) % 2 ? WHITE : OUT; g.fillRect(sx - 8, i, 16, 20); }
+        for (let r = 0; r < 4; r++) for (let c = 0; c < 6; c++) { g.fillStyle = (r + c) % 2 ? OUT : WHITE; g.fillRect(sx + 8 + c * 18, 60 + r * 18 + Math.sin(t * 5 + c * 0.6) * 4, 18, 18); }
+        txt(g, "BİTİŞ", sx + 60, 160, 34, "#ffe650");
+        break;
+      }
+    }
+  }
+}
+class Diver {   // Uyarı işaretinden sonra arabaya dalan kuş (bazıları son anda vazgeçer)
+  constructor(tx, ty, kind, speed) { Object.assign(this, { tx, ty, kind, speed, x: tx + rand(160, 300), y: -40, t: 0, alive: true, veer: Math.random() < 0.3, veered: false, passed: false, vx: 0, vy: 0, hit: false }); }
+  update(dt) {
+    this.t += dt; if (this.t < 0.95) return;
+    if (!this.vx && !this.vy) { const dx = this.tx - this.x, dy = this.ty - this.y, d = Math.hypot(dx, dy) || 1; this.vx = dx / d * this.speed; this.vy = dy / d * this.speed; }
+    if (this.veer && !this.veered && this.y > this.ty - 170) { this.veered = true; this.vx = -this.speed * 0.9; this.vy = -this.speed * 0.5; }
+    this.x += this.vx * dt; this.y += this.vy * dt;
+    if (this.y > this.ty + 60 || this.x < -100 || this.y < -200) this.alive = false;
+  }
+  rect() { return { x: this.x - 18, y: this.y - 18, w: 36, h: 36 }; }
+  draw(g) {
+    if (this.t < 0.95) {
+      const k = this.t / 0.95;
+      ell(g, this.tx, this.ty + 56, 30 * k, 6, 0, "rgba(40,40,60,0.55)");
+      if (Math.floor(this.t * 10) % 2 === 0) txt(g, "!", this.tx, 110, 46, "#ff3c3c");
+      return;
+    }
+    drawBird(g, this.kind, this.x, this.y, this.vx < 0 ? -1 : 1, this.t * (this.veered ? 28 : 8), true, this.veered ? "scared" : "angry", [this.vx / this.speed, this.vy / this.speed], this.t);
+  }
+}
+class Bomber {
+  constructor(y, kind, speed) { Object.assign(this, { kind, x: W + 50, y, baseY: y, speed, t: 0, alive: true, drops: randi(1, 2), cool: 0 }); }
+  update(dt, car, spawn) {
+    this.t += dt; this.x -= this.speed * dt; this.y = this.baseY + Math.sin(this.t * 4) * 12; this.cool -= dt;
+    if (this.drops > 0 && this.cool <= 0 && Math.abs(this.x - (car.x + 120)) < 30) { this.drops--; this.cool = 0.35; spawn(this.x, this.y + 18); }
+    if (this.x < -80) this.alive = false;
+  }
+  draw(g) { drawBird(g, this.kind, this.x, this.y, -1, this.t * 20, true, "angry", [-0.5, 0.8], this.t); }
+}
+class Swarm {   // Arkadan kovalayan sürü: araba yavaşlarsa yaklaşır
+  constructor() { this.x = -380; this.t = 0; this.m = Array.from({ length: 9 }, () => [pick(["blue", "yellow", "red"]), rand(-200, 0), rand(-260, -40), rand(0, 6)]); }
+  update(dt, speed, p) { this.t += dt; const rel = (speed - CAR_CRUISE) / (CAR_MAXS - CAR_CRUISE); this.x = clamp(this.x + (70 + 80 * p - 330 * rel) * dt, -380, 900); }
+  draw(g) {
+    if (this.x < -260) return;
+    for (const [k, dx, dy, ph] of this.m) drawBird(g, k, this.x + dx + Math.sin(this.t * 3 + ph) * 12, CAR_GROUND - 40 + dy + Math.cos(this.t * 4 + ph) * 10, 1, this.t * 22 + ph, true, "angry", [1, 0.2], this.t, 0.9);
+  }
+}
+
+// =====================================================================
+//  ARAYÜZ: düğmeler, HUD, dokunmatik kontroller
+// =====================================================================
+class Button {
+  constructor(x, y, w, h, label, color, size = 28, icon = null) { Object.assign(this, { x, y, w, h, label, color, size, icon, pop: 0 }); }
+  hit(p, pad = 8) { return p.x >= this.x - pad && p.x <= this.x + this.w + pad && p.y >= this.y - pad && p.y <= this.y + this.h + pad; }
+  draw(g, dt = FPS_DT) {
+    this.pop = Math.max(0, this.pop - dt * 4);
+    const grow = this.pop * 6, x = this.x - grow, y = this.y - grow, w = this.w + grow * 2, h = this.h + grow * 2, r = Math.min(h / 2, 22);
+    rrect(g, x, y + 5, w, h, r, shadeHex(this.color, -70));
+    rrect(g, x, y, w, h, r, this.color, OUT, 3);
+    rrect(g, x + 10, y + 6, w - 20, Math.max(4, h / 6), 6, shadeHex(this.color, 55));
+    if (this.icon) this.icon(g, x + w / 2, y + h / 2, h);
+    if (this.label) txt(g, this.label, x + w / 2, y + h / 2 + 1, this.size, WHITE);
+  }
+}
+function shadeHex(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  return rgb([clamp((n >> 16) + amt, 0, 255), clamp(((n >> 8) & 255) + amt, 0, 255), clamp((n & 255) + amt, 0, 255)]);
+}
+const icons = {
+  pause: (g, cx, cy, h) => { const w = h / 6; rrect(g, cx - 2 * w, cy - h / 4, w + 1, h / 2, 2, WHITE); rrect(g, cx + w, cy - h / 4, w + 1, h / 2, 2, WHITE); },
+  restart: (g, cx, cy, h) => { const r = h / 4; g.beginPath(); g.arc(cx, cy, r, -TAU + 0.2, -0.6); g.lineWidth = 3.5; g.strokeStyle = WHITE; g.stroke(); const tx = cx + Math.cos(-0.6) * r, ty = cy + Math.sin(-0.6) * r; poly(g, [[tx - 7, ty - 3], [tx + 5, ty - 5], [tx + 1, ty + 7]], WHITE); },
+  sound: (g, cx, cy, h) => {
+    const r = h / 4, x = cx - 4; g.fillStyle = WHITE; g.fillRect(x - r, cy - r * 0.45, r * 0.6, r * 0.9);
+    poly(g, [[x - r * 0.5, cy - r * 0.45], [x + r * 0.3, cy - r], [x + r * 0.3, cy + r], [x - r * 0.5, cy + r * 0.45]], WHITE);
+    if (!Snd.muted) for (const k of [1, 2]) { g.beginPath(); g.arc(x + r * 0.3, cy, r * 0.5 * k, -0.9, 0.9); g.lineWidth = 2.5; g.strokeStyle = WHITE; g.stroke(); }
+    else { line(g, x + r * 0.6, cy - r * 0.5, x + r * 1.4, cy + r * 0.5, "#ff5a5a", 3); line(g, x + r * 0.6, cy + r * 0.5, x + r * 1.4, cy - r * 0.5, "#ff5a5a", 3); }
+  },
+};
+function panel(g, x, y, w, h, color = "rgba(255,250,235,0.95)") { rrect(g, x, y, w, h, 24, color, OUT, 4); }
+function dim(g, a = 0.55) { g.fillStyle = `rgba(10,10,30,${a})`; g.fillRect(0, 0, W, H); }
+
+class SoundPanel {
+  constructor(x, y) { this.btns = Object.keys(SOUND_CATS).map((k, i) => Object.assign(new Button(x + (i % 2) * 250, y + Math.floor(i / 2) * 66, 235, 54, "", UI_GREEN, 22), { key: k })); }
+  tap(p) { for (const b of this.btns) if (b.hit(p, 2)) { Snd.unlock(); Snd.toggle(b.key); Snd.play("click"); b.pop = 1; return true; } return false; }
+  draw(g) { for (const b of this.btns) { b.color = Snd.on[b.key] && !Snd.muted ? UI_GREEN : "#9696a0"; b.label = `${SOUND_CATS[b.key]}: ${Snd.on[b.key] ? "Açık" : "Kapalı"}`; b.draw(g); } }
+}
+
+class HUD {
+  constructor() {
+    const s = 60, y = 6;
+    this.pause = new Button(W - 3 * (s + 10), y, s, s, "", UI_BLUE, 20, icons.pause);
+    this.restart = new Button(W - 2 * (s + 10), y, s, s, "", UI_ACCENT, 20, icons.restart);
+    this.sound = new Button(W - (s + 10), y, s, s, "", UI_GREEN, 20, icons.sound);
+    this.shown = 0; this.pulse = 0;
+  }
+  tap(p) { for (const k of ["pause", "restart", "sound"]) if (this[k].hit(p, 10)) { this[k].pop = 1; return k; } return null; }
+  update(dt) {
+    const target = G.stats.score;
+    if (this.shown < target) { this.shown = Math.min(target, this.shown + Math.max(60 * dt, (target - this.shown) * dt * 8)); this.pulse = 0.2; } else this.shown = target;
+    this.pulse = Math.max(0, this.pulse - dt);
+  }
+  draw(g, o) {
+    g.fillStyle = "rgba(30,30,60,0.6)"; g.fillRect(0, 0, W, 74);
+    let x = 16;
+    g.save(); g.translate(x, 37); g.scale(1 + this.pulse * 0.8, 1 + this.pulse * 0.8);
+    txt(g, `Puan: ${Math.floor(this.shown)}`, 0, 0, 30, "#ffe65a", { align: "left" }); g.restore();
+    x += 200;
+    if (o.stones !== undefined) { drawStone(g, x + 12, 37, 11, 0.4); txt(g, `x ${o.stones}`, x + 30, 38, 27, o.stones > 3 ? WHITE : "#ff7878", { align: "left" }); x += 105; }
+    if (o.speed !== undefined) { txt(g, `Hız: ${o.speed} km/sa`, x, 38, 25, WHITE, { align: "left" }); x += 170; }
+    if (o.scared !== undefined) {
+      drawBird(g, "blue", x + 16, 38, 1, performance.now() / 80, true, "scared", [0, 0], 0, 0.8);
+      txt(g, `Kaçan: ${o.scared}/${o.goal}`, x + 40, 38, 25, WHITE, { align: "left" }); x += 170;
+    }
+    txt(g, o.healthLabel, x, 18, 20, WHITE, { align: "left" });
+    const frac = clamp(G.stats.health / MAX_HEALTH, 0, 1), col = frac > 0.5 ? "#5adc6e" : frac > 0.25 ? "#ffc83c" : "#ff5050";
+    rrect(g, x, 34, 140, 20, 8, "#3c2832");
+    if (frac > 0) rrect(g, x, 34, 140 * frac, 20, 8, col);
+    rrect(g, x, 34, 140, 20, 8, null, OUT, 2);
+    drawHeart(g, x + 156, 43, 8);
+    x += 180;
+    txt(g, `Bölüm ${o.level}/3: ${o.name}`, x, 18, 22, "#bee6ff", { align: "left" });
+    if (o.progress !== undefined) {
+      const p = clamp(o.progress, 0, 1);
+      rrect(g, x, 38, 210, 16, 8, "#3c3c50"); rrect(g, x, 38, Math.max(16, 210 * p), 16, 8, "#ffc83c"); rrect(g, x, 38, 210, 16, 8, null, OUT, 2);
+      circ(g, x + 210 * p, 46, 9, "#eb4146", OUT, 2);
+    } else if (o.combo >= 1) txt(g, `Kombo x${(1 + o.combo * 0.5).toFixed(1)}`, x, 48 + Math.sin(performance.now() / 90) * 2, 22, "#ffa0dc", { align: "left" });
+    this.pause.draw(g); this.restart.draw(g); this.sound.draw(g);
+  }
+}
+
+// Ekrandaki dokunmatik kontrol düğmeleri (yalnızca dokunmatik cihazlarda görünür)
+class TouchPad {
+  constructor(defs) { this.defs = defs; }
+  find(p) { for (const d of this.defs) if (dist(p.x, p.y, d.x, d.y) < d.r + 14) return d.id; return null; }
+  draw(g) {
+    if (!Input.touchSeen) return;
+    for (const d of this.defs) {
+      const down = Input.held(d.id);
+      g.save(); g.globalAlpha = down ? 0.75 : 0.42;
+      circ(g, d.x, d.y, d.r, down ? "#ffffff" : "#1e1e3c", "#ffffff", 3); g.restore();
+      txt(g, d.label, d.x, d.y + 1, d.size || 26, down ? OUT : WHITE, { ol: down ? 0 : 2 });
+    }
+  }
+}
+
+// =====================================================================
+//  GİRDİ: dokunma, fare ve klavye
+// =====================================================================
+const Input = {
+  keys: new Set(), ptrs: new Map(), last: { x: 700, y: 300 }, touchSeen: TOUCH,
+  held(id) { for (const p of this.ptrs.values()) if (p.btn === id) return true; return false; },
+  key(...codes) { return codes.some(c => this.keys.has(c)); },
+};
+
+// =====================================================================
+//  SAHNELER
+// =====================================================================
+class PlayScene {
+  constructor(level) {
+    this.level = level; this.cfg = LEVELS[level]; this.hud = new HUD(); this.fx = new Effects(); this.splats = new Splats();
+    this.phase = "intro"; this.introT = 0; this.completeT = 0; this.paused = false; this.confirm = false; this.banner = null; this.summary = []; this.shake = 0;
+    const cx = W / 2;
+    this.pb = { resume: new Button(cx - 160, 200, 320, 64, "Devam Et", UI_GREEN, 32), restart: new Button(cx - 160, 470, 320, 58, "Yeniden Başlat", UI_ACCENT, 27), menu: new Button(cx - 160, 540, 320, 58, "Ana Menü", UI_BLUE, 27) };
+    this.sp = new SoundPanel(cx - 245, 290);
+    this.next = new Button(cx - 150, 520, 300, 70, "Devam Et", UI_GREEN, 32);
+    this.yes = new Button(cx - 230, 380, 210, 64, "Evet", UI_ACCENT, 30);
+    this.no = new Button(cx + 20, 380, 210, 64, "Hayır", UI_GREEN, 30);
+  }
+  togglePause() { if (this.phase === "complete") return; this.paused = !this.paused; this.confirm = false; if (this.paused) this.onPause(); }
+  onPause() {}
+  startPlay() { this.phase = "play"; }
+  showBanner(text, time = 2.2, color = "#ffe65a") { this.banner = { text, left: time, total: time, color }; }
+  complete(summary) {
+    if (this.phase === "complete") return;
+    this.phase = "complete"; this.completeT = 0; this.summary = summary; G.stats.levelsCompleted++;
+    Snd.engine(null); Snd.music("music_victory", false);
+    for (let i = 0; i < 60; i++) this.fx.add(W / 2, H / 2, Math.cos(i) * (200 + i * 6), -Math.abs(Math.sin(i * 1.7)) * 600 - 100, ["#ff5a78", "#ffdc46", "#78a0ff", "#78e68c"][i % 4], { size: 6, life: 2.2, g: 600, kind: "star", vrot: 5 });
+  }
+  goNext() { if (this.level >= LAST_LEVEL) G.gameOver(true); else G.startLevel(this.level + 1); }
+  fail(reason) { Snd.engine(null); G.gameOver(false, reason); }
+
+  key(code) {
+    if (code === "Escape" || code === "KeyP") { this.togglePause(); return; }
+    if (code === "KeyM") { Snd.toggleMute(); return; }
+    if (this.paused) return;
+    if (this.phase === "intro" && (code === "Space" || code === "Enter") && this.introT > 0.4) { this.startPlay(); return; }
+    if (this.phase === "complete" && (code === "Space" || code === "Enter") && this.completeT > 0.8) { Snd.play("click"); this.goNext(); return; }
+    if (this.phase !== "intro" && this.phase !== "complete") this.playKey(code);
+  }
+  down(p) {   // Dokunma / tıklama başlangıcı. true dönerse dokunuş arayüze aittir.
+    if (this.paused) {
+      if (this.confirm) {
+        if (this.yes.hit(p)) { Snd.play("click"); G.newGame(); } else if (this.no.hit(p)) { Snd.play("click"); this.confirm = false; this.paused = false; }
+        return true;
+      }
+      for (const [k, b] of Object.entries(this.pb)) if (b.hit(p, 4)) {
+        Snd.play("click"); b.pop = 1;
+        if (k === "resume") this.togglePause(); else if (k === "restart") G.newGame(); else G.toMenu();
+        return true;
+      }
+      this.sp.tap(p); return true;
+    }
+    const a = this.hud.tap(p);
+    if (a) {
+      Snd.play("click");
+      if (a === "pause") this.togglePause();
+      else if (a === "restart") { this.paused = true; this.confirm = true; this.onPause(); }
+      else Snd.toggleMute();
+      return true;
+    }
+    if (this.phase === "intro") { if (this.introT > 0.4) this.startPlay(); return true; }
+    if (this.phase === "complete") { if (this.completeT > 0.8 && this.next.hit(p)) { Snd.play("click"); this.goNext(); } return true; }
+    return this.playDown(p);
+  }
+  move(p) { if (!this.paused) this.playMove(p); }
+  up(p) { if (!this.paused) this.playUp(p); }
+  playKey() {} playDown() { return false; } playMove() {} playUp() {}
+
+  update(dt) {
+    this.hud.update(dt);
+    if (this.paused) return;
+    this.shake = Math.max(0, this.shake - dt * 25);
+    if (this.banner) { this.banner.left -= dt; if (this.banner.left <= 0) this.banner = null; }
+    if (this.phase === "intro") { this.introT += dt; if (this.introT > 2.6) this.startPlay(); this.world(dt, false); }
+    else if (this.phase === "complete") { this.completeT += dt; this.world(dt, false); }
+    else this.world(dt, true);
+    this.fx.update(dt); this.splats.update(dt);
+  }
+  draw(g) {
+    this.drawWorld(g); this.fx.drawTexts(g); this.splats.draw(g);
+    if (this.pad && (this.phase === "play" || this.phase === "car")) this.pad.draw(g);
+    this.drawHud(g);
+    if (this.banner) {
+      const b = this.banner, sc = easeOutBack(Math.min(1, (b.total - b.left) / 0.35));
+      g.save(); g.globalAlpha = b.left < 0.4 ? b.left / 0.4 : 1; g.translate(W / 2, 170); g.scale(sc, sc); txt(g, b.text, 0, 0, 52, b.color, { ol: 5 }); g.restore();
+    }
+    if (this.phase === "intro") this.drawIntro(g);
+    else if (this.phase === "complete") this.drawComplete(g);
+    if (this.paused) this.drawPause(g);
+  }
+  drawIntro(g) {
+    const k = easeOutBack(Math.min(1, this.introT / 0.5)), cy = -150 + (H / 2 - 40 + 150) * k;
+    panel(g, W / 2 - 400, cy - 115, 800, 230);
+    txt(g, `BÖLÜM ${this.level}`, W / 2, cy - 70, 34, "#ff8c3c");
+    txt(g, this.cfg.name, W / 2, cy - 12, 50, "#ffdc46", { ol: 4 });
+    txt(g, this.cfg.tip, W / 2, cy + 48, 23, OUT, { ol: 0 });
+    if (Math.floor(this.introT * 2) % 2 === 0) txt(g, TOUCH ? "Başlamak için dokun" : "Başlamak için tıkla", W / 2, cy + 90, 19, "#78788c", { ol: 0 });
+  }
+  drawComplete(g) {
+    dim(g, Math.min(1, this.completeT * 2) * 0.45);
+    const k = easeOutBack(Math.min(1, this.completeT / 0.6)), cy = -300 + (H / 2 + 300) * k, top = cy - 220;
+    panel(g, W / 2 - 320, top, 640, 440);
+    txt(g, "BÖLÜM TAMAMLANDI!", W / 2, top + 55, 44, "#ffd23c", { ol: 4 });
+    for (let i = 0; i < 3; i++) star(g, W / 2 + (i - 1) * 80, top + 120 - Math.abs(Math.sin(this.completeT * 4 + i)) * 10, 30, -Math.PI / 2, "#ffd732", OUT);
+    this.summary.forEach((l, i) => txt(g, l, W / 2, top + 185 + i * 42, 26, OUT, { ol: 0 }));
+    this.next.y = top + 440 - 95; this.next.label = this.level < LAST_LEVEL ? "Devam Et" : "Sonuçlar";
+    if (this.completeT > 0.8) this.next.draw(g);
+  }
+  drawPause(g) {
+    dim(g, 0.6);
+    if (this.confirm) {
+      panel(g, W / 2 - 300, 220, 600, 260, "rgba(60,60,110,0.96)");
+      txt(g, "Oyun baştan başlasın mı?", W / 2, 285, 36, WHITE, { ol: 3 });
+      txt(g, "Puanın ve bölümlerin sıfırlanır.", W / 2, 330, 22, "#dcdcff", { ol: 0 });
+      this.yes.draw(g); this.no.draw(g); return;
+    }
+    panel(g, W / 2 - 280, 120, 560, 520, "rgba(60,60,110,0.96)");
+    txt(g, "DURAKLATILDI", W / 2, 162, 44, WHITE, { ol: 4 });
+    for (const b of Object.values(this.pb)) b.draw(g);
+    this.sp.draw(g);
+  }
+  world() {} drawWorld() {} drawHud() {}
+}
+
+// ------------------------------------------------------------- Bölüm 1-2: taş atma
+class ThrowLevel extends PlayScene {
+  constructor(level) {
+    super(level);
+    const bg = buildThrowBackground(level * 7 + 3, [555, 775, 985, 1165]);
+    Object.assign(this, bg);
+    this.perchOwner = this.perches.map(() => null);
+    this.clouds = new Clouds(6); this.player = new Player(200);
+    Object.assign(this, { birds: [], stones: [], eggs: [], chicks: [], piles: [], stonesLeft: this.cfg.stones, goal: this.cfg.goal, scaredHere: 0,
+      scoreStart: G.stats.score, charging: false, charge: 0, aimId: null, aim: { x: 700, y: 300 }, combo: 0, spawnT: 1, flockT: 5, nextFlock: 1,
+      helpChance: level === 1 ? 0.35 : 0.6, revenge: this.cfg.revenge, revengeOn: false, attackT: 3, diveSpeed: 1, pileT: 14, rescued: false,
+      outT: 0, t: 0, throws: 0, car: null, autoBoard: false });
+    for (let i = 0; i < Math.floor(this.cfg.maxBirds * 0.65); i++) this.spawnBird(null, true);
+    this.pad = new TouchPad([{ id: "left", x: 80, y: 650, r: 52, label: "◀" }, { id: "right", x: 205, y: 650, r: 52, label: "▶" }]);
+    Snd.music("music_calm");
+  }
+  // Kuşların dünyayla etkileşimi
+  aimPoint() { if (this.player.hidden) return this.car ? [this.car.x, GROUND_Y - 60] : [W / 2, GROUND_Y]; return [this.aim.x, this.aim.y]; }
+  playerTarget() { return [this.player.x, GROUND_Y - 50]; }
+  neighborOf(bird, r) { return this.birds.find(b => b !== bird && b.state === "perched" && Math.abs(b.x - bird.x) < r && Math.abs(b.y - bird.y) < 80) || null; }
+  freePerchNear(x, y, maxd) {
+    const opts = []; this.perches.forEach((p, i) => { if (!this.perchOwner[i] && dist(p[0], p[1], x, y) < maxd) opts.push(i); });
+    return opts.length ? pick(opts) : null;
+  }
+  rebuildPerches() { this.perchOwner = this.perches.map(() => null); for (const b of this.birds) if (b.perch !== null && ["perched", "hopping", "flying", "stunned"].includes(b.state)) this.perchOwner[b.perch] = b; }
+  chooseKind() { const w = Object.assign({}, this.cfg.weights); if (this.birds.some(b => b.kind === "gold")) delete w.gold; return weighted(w); }
+  spawnBird(kind, perched = false, near = null) {
+    kind = kind || this.chooseKind();
+    const idx = near ? this.freePerchNear(near[0], near[1], 420) : this.freePerchNear(W / 2, 0, 9999);
+    if (idx === null) return null;
+    const b = new Bird(kind, 0, 0, this.cfg.speedMult); b.perch = idx; this.perchOwner[idx] = b;
+    if (perched) { [b.x, b.y] = b.perchPos(this.perches[idx]); b.set("perched"); }
+    else { const side = near ? (near[0] > W / 2 ? 1 : -1) : pick([-1, 1]); b.x = side < 0 ? -30 : W + 30; b.y = rand(80, 300); b.set("flying"); }
+    this.birds.push(b); return b;
+  }
+  spawnEgg(x, y, vx, vy, color, harmful = false) { this.eggs.push(new Egg(x, y, vx, vy, color, harmful)); if (!harmful) this.fx.text("Yumurta!", x, y - 30, "#fffadc", 19, 0.8); }
+  callForHelp(bird) { const n = this.level === 1 ? randi(2, 3) : randi(3, 4); for (let i = 0; i < n; i++) this.spawnBird(null, false, [bird.x, bird.y]); if (this.revenge) this.attackT = Math.min(this.attackT, 1); }
+  progress() { return Math.min(1, this.scaredHere / this.goal); }
+  moveDir() { let m = 0; if (Input.held("left") || Input.key("KeyA", "ArrowLeft")) m -= 1; if (Input.held("right") || Input.key("KeyD", "ArrowRight")) m += 1; return m; }
+
+  // Girdiler
+  playKey(code) { if (this.phase === "car" && ["KeyE", "Space", "KeyW", "ArrowUp"].includes(code)) this.tryBoard(); }
+  playDown(p) {
+    if (this.phase === "car") {
+      if (this.car && Math.abs(p.x - this.car.x) < 140 && p.y > GROUND_Y - 170) this.tryBoard(true);
+      return false;
+    }
+    if (this.phase === "play" && this.stonesLeft > 0 && this.player.hurtT <= 0 && this.aimId === null) {
+      this.charging = true; this.charge = 0; this.aimId = p.id; this.aim = { x: p.x, y: p.y };
+    }
+    return false;
+  }
+  playMove(p) { if (p.id === this.aimId || (p.mouse && !this.charging)) this.aim = { x: p.x, y: p.y }; }
+  playUp(p) { if (p.id === this.aimId) { this.aim = { x: p.x, y: p.y }; if (this.charging) this.throwStone(); this.charging = false; this.aimId = null; } }
+  onPause() { this.charging = false; this.aimId = null; }
+
+  throwVel(aim = this.aim) {
+    const [sx, sy] = this.player.shoulder, dx = aim.x - sx, dy = aim.y - sy, d = Math.hypot(dx, dy) || 1, sp = THROW_MIN + (THROW_MAX - THROW_MIN) * this.charge;
+    return { vx: dx / d * sp, vy: dy / d * sp, x: sx + dx / d * 28, y: sy + dy / d * 28 };
+  }
+  throwStone() {
+    if (this.stonesLeft <= 0) return;
+    const v = this.throwVel(); this.stones.push(new Stone(v.x, v.y, v.vx, v.vy));
+    this.stonesLeft--; this.throws++; this.player.throwT = 0.25; Snd.play("throw");
+    for (const b of this.birds) if (b.state === "perched" && Math.abs(b.x - v.x) < 500) b.nervous = 0.6;
+  }
+  // Puanlar
+  award(bird, stone, isHit = false, bonus = null) {
+    if (bird.counted) return;
+    bird.counted = true;
+    const mult = 1 + COMBO_STEP * Math.min(this.combo, COMBO_MAX);
+    let pts = bird.points + (isHit ? HIT_BONUS : 0);
+    if (stone) { pts += 10 * stone.scared; stone.scared++; stone.touched.add(bird.id); }
+    pts = Math.floor(pts * mult);
+    G.stats.score += pts; G.stats.birdsScared++; this.scaredHere++;
+    this.fx.text(`+${pts}`, bird.x, bird.y - 25, rgb(lerpC(BT[bird.kind].body, [255, 255, 255], 0.2)), pts < 100 ? 28 : 36);
+    if (bonus) this.fx.text(bonus, bird.x, bird.y - 65, "#fff078", 23, 1.2);
+    const names = { 2: "ÇİFTE!", 3: "ÜÇLÜ!", 4: "SÜPER!", 6: "MUHTEŞEM!" };
+    if (stone && names[stone.scared]) { this.fx.text(names[stone.scared], stone.x, stone.y - 40, "#ff96dc", 32, 1.3); Snd.play("combo"); }
+    if (bird.kind === "gold") this.showBanner(`ALTIN KUŞ! +${pts}`, 1.6, "#ffd73c");
+    Snd.play("point");
+  }
+  scare(bird, stone, sx, bonus) {
+    let group = [bird];
+    if (bird.flockId !== null) {
+      group = this.birds.filter(b => b.flockId === bird.flockId && !b.counted && b.state === "flock");
+      if (group.length > 1) this.fx.text("SÜRÜ DAĞILDI!", bird.x, bird.y - 70, "#b4e6ff", 27, 1.3);
+      if (!group.length) group = [bird];
+    }
+    for (const b of group) { this.award(b, stone, false, bonus); b.flee(sx); this.fx.feathers(b.x, b.y, rgb(BT[b.kind].body), 3); }
+    Snd.play("flap"); Snd.play("chirp_" + bird.kind);
+  }
+  hitBird(bird, stone) {
+    this.award(bird, stone, true, "İSABET!");
+    stone.deflect(); Snd.play("hit"); Snd.play("cry");
+    this.fx.stars(bird.x, bird.y - 10, 7); this.fx.feathers(bird.x, bird.y, rgb(BT[bird.kind].body), 6);
+    this.fx.text(pick(["BONK!", "TONK!", "PAT!"]), bird.x + 30, bird.y - 40, WHITE, 24, 0.7, 40);
+    this.shake = Math.max(this.shake, 4);
+    if (["diving", "bomber", "flock"].includes(bird.state)) { bird.flee(stone.x); this.fx.text("Savuşturuldu!", bird.x, bird.y - 70, "#a0ffa0", 24, 1.2); return; }
+    bird.stun();
+    for (const o of this.birds) if (o !== bird && o.isTarget() && dist(o.x, o.y, bird.x, bird.y) < 140) this.scare(o, stone, bird.x, "Panik!");
+  }
+  resolveStone(s) {
+    s.resolved = true;
+    if (s.scared > 0) {
+      this.combo++; G.stats.bestCombo = Math.max(G.stats.bestCombo, this.combo);
+      if (this.combo >= 2) { this.fx.text(`KOMBO x${(1 + COMBO_STEP * Math.min(this.combo, COMBO_MAX)).toFixed(1)}!`, s.x, GROUND_Y - 80, "#ff82d2", 30, 1.3); Snd.play("combo"); }
+    } else { if (this.combo >= 2) this.fx.text("Seri bitti", s.x, GROUND_Y - 60, "#dcdce6", 20, 0.9); this.combo = 0; }
+  }
+  damage(amount, text = "Ah!") {
+    const p = this.player; if (p.invT > 0 || p.hidden) return;
+    G.stats.health = Math.max(0, G.stats.health - amount);
+    p.hurtT = 0.6; p.invT = 1.3; this.charging = false; this.aimId = null; this.shake = 9; Snd.play("hurt");
+    this.fx.text(text, p.x, GROUND_Y - 120, "#ff7878", 27, 0.9); this.fx.feathers(p.x, GROUND_Y - 80, WHITE, 5);
+    if (G.stats.health <= 0) this.fail("Kuşlar seni yakaladı!");
+  }
+
+  world(dt, active) {
+    this.t += dt; this.clouds.update(dt);
+    if (this.charging) this.charge = Math.min(1, this.charge + dt / CHARGE_TIME);
+    let move = active && !this.player.hidden ? this.moveDir() : 0;
+    if (this.autoBoard && this.car && this.car.state === "wait") { move = Math.sign(this.car.x - this.player.x); if (Math.abs(this.car.x - this.player.x) < 110) this.tryBoard(); }
+    this.player.update(dt, move, this.charging ? [this.aim.x, this.aim.y] : this.aimPoint(), this.charging);
+    const playing = active && (this.phase === "play" || this.phase === "car");
+    if (playing) { this.spawning(dt); if (this.revenge) this.revengeTick(dt); this.pickups(dt); }
+    this.rebuildPerches();
+    for (const b of this.birds) b.update(dt, this);
+    this.birds = this.birds.filter(b => b.alive);
+    const hb = this.player.hitbox();
+    for (const b of this.birds) if (b.state === "diving" && b.st > 0.7 && hit({ x: hb.x - b.size / 2, y: hb.y - b.size / 2, w: hb.w + b.size, h: hb.h + b.size }, b.x, b.y)) { this.damage(this.phase === "car" ? 4 : 9, pick(["Ay!", "Gak!", "Of!"])); b.retreat(); }
+    this.updStones(dt); this.updEggs(dt);
+    for (const c of this.chicks) c.update(dt); this.chicks = this.chicks.filter(c => c.alive);
+    if (this.phase === "car") this.updCar(dt);
+    if (!playing || this.phase !== "play") return;
+    if (this.scaredHere >= this.goal) { if (this.level === 2) this.startCar(); else this.finish(); return; }
+    if (this.stonesLeft === 0 && !this.stones.some(s => s.flying)) {
+      if (!this.rescued) { this.rescued = true; this.spawnPile(5, true); }
+      else if (!this.piles.length) { this.outT += dt; if (this.outT > 1.5) this.fail("Taşların bitti!"); }
+    } else this.outT = 0;
+  }
+  spawning(dt) {
+    const c = this.cfg; this.spawnT -= dt;
+    const resting = this.birds.filter(b => ["perched", "hopping", "flying", "stunned"].includes(b.state)).length;
+    const extra = this.revenge ? Math.floor(this.progress() * 6) : 0;
+    if (this.spawnT <= 0 && resting < c.maxBirds + extra) { this.spawnBird(); this.spawnT = c.spawnEvery * rand(0.7, 1.3); }
+    if (c.flocks) { this.flockT -= dt; if (this.flockT <= 0) { this.flockT = rand(7, 11); this.spawnFlock(); } }
+  }
+  spawnFlock() {
+    const n = randi(5, 7), d = pick([-1, 1]), kind = pick(["blue", "yellow", "red"]), baseY = rand(110, 210), fid = this.nextFlock++;
+    for (let i = 0; i < n; i++) {
+      const b = new Bird(kind, 0, 0, this.cfg.speedMult);
+      b.x = d > 0 ? -60 - i * 45 : W + 60 + i * 45; b.baseY = baseY + (i % 2) * 35 + Math.floor(i / 2) * 6; b.y = b.baseY;
+      b.vx = d * 170 * this.cfg.speedMult; b.t = i * 0.3; b.flockId = fid; b.set("flock"); this.birds.push(b);
+    }
+    Snd.play("flap");
+  }
+  revengeTick(dt) {
+    const p = this.progress();
+    if (!this.revengeOn && (p >= 0.2 || this.t > 25)) { this.revengeOn = true; this.showBanner("KUŞLAR İNTİKAM İSTİYOR!", 2.6, "#ff6e6e"); Snd.music("music_action"); Snd.play("angry"); }
+    if (!this.revengeOn) return;
+    this.diveSpeed = 1 + p * 0.7; this.attackT -= dt; if (this.attackT > 0) return;
+    this.attackT = (this.phase === "car" ? 1.1 : Math.max(1.3, 3.8 - p * 2.3)) * rand(0.8, 1.2);
+    if (Math.random() < 0.65) {
+      const perched = this.birds.filter(b => b.state === "perched"); let b;
+      if (perched.length) { b = pick(perched); b.perch = null; } else { b = new Bird(this.chooseKind(), rand(300, W - 100), -30, this.cfg.speedMult); this.birds.push(b); }
+      b.diveTarget = null; b.set("diving");
+    } else {
+      const d = pick([-1, 1]), b = new Bird(pick(["red", "yellow"]), d > 0 ? -40 : W + 40, 0, this.cfg.speedMult);
+      b.baseY = rand(110, 170); b.y = b.baseY; b.vx = d * rand(230, 300); b.set("bomber"); this.birds.push(b); Snd.play("angry");
+    }
+  }
+  updStones(dt) {
+    for (const s of this.stones) {
+      if (s.update(dt) === "bounce") { Snd.play("thud", 0.6); this.fx.dust(s.x, GROUND_Y, 5); }
+      if (s.flying) for (const b of this.birds) {
+        if (s.touched.has(b.id) || !b.isTarget()) continue;
+        const d = dist(s.x, s.y, b.x, b.y);
+        if (d < b.size + s.r + 3) this.hitBird(b, s);
+        else if (d < BT[b.kind].scare * TOUCH_SCARE * (["diving", "bomber"].includes(b.state) ? 0.6 : 1)) this.scare(b, s, s.x);
+        else if (d < 230 && b.state === "perched") b.nervous = 0.4;
+      }
+      if (!s.flying && !s.resolved) this.resolveStone(s);
+    }
+    this.stones = this.stones.filter(s => s.alive);
+  }
+  updEggs(dt) {
+    const hb = this.player.hitbox();
+    for (const e of this.eggs) {
+      const ev = e.update(dt);
+      if (e.harmful && e.state === "fall" && !this.player.hidden && hit(hb, e.x, e.y)) {
+        e.alive = false; Snd.play("egg_crack"); this.fx.yolk(e.x, e.y, GROUND_Y);
+        if (this.player.invT <= 0) { this.player.slowT = 2.5; this.splats.add(); this.damage(5, "Yumurta!"); }
+        continue;
+      }
+      if (ev === "land") { Snd.play("egg_drop"); this.fx.dust(e.x, GROUND_Y, 3, "#fffff0"); }
+      else if (ev === "crack") {
+        e.alive = false; Snd.play("egg_crack"); this.fx.yolk(e.x, e.y, GROUND_Y); this.fx.text("ÇAT!", e.x, e.y - 30, "#ffdc50", 25, 0.8);
+        if (!e.harmful || Math.random() < 0.4) this.chicks.push(new Chick(e.x));
+      }
+    }
+    this.eggs = this.eggs.filter(e => e.alive);
+  }
+  spawnPile(n = 5, rescue = false) { const x = rand(90, 440); this.piles.push({ x, n, t: 0 }); if (rescue) this.showBanner("Son şans! Taşları topla!", 2.4, "#ffdc78"); this.fx.dust(x, GROUND_Y, 8); }
+  pickups(dt) {
+    if (this.phase !== "play") return;
+    this.pileT -= dt;
+    if (this.pileT <= 0) { this.pileT = rand(13, 18); if (this.stonesLeft < 15 && this.piles.length < 2) this.spawnPile(randi(3, 5)); }
+    for (const p of this.piles) {
+      p.t += dt;
+      if (Math.abs(p.x - this.player.x) < 34) { const n = p.n; p.n = 0; this.stonesLeft += n; Snd.play("pickup"); this.fx.text(`+${n} Taş`, p.x, GROUND_Y - 110, "#dcdcf0", 24); }
+    }
+    this.piles = this.piles.filter(p => p.n > 0);
+  }
+  startCar() {
+    this.phase = "car"; this.charging = false; this.aimId = null;
+    this.car = { x: -180, state: "arrive", t: 0, wheel: 0, boarded: false };
+    this.showBanner("Çabuk, arabaya bin!", 3, "#ffe65a"); Snd.play("honk"); this.attackT = 1.5;
+    for (let i = 0; i < 6; i++) this.spawnBird();
+  }
+  tryBoard(fromTap = false) {
+    const c = this.car; if (!c || c.state !== "wait") { if (fromTap) this.autoBoard = true; return; }
+    if (Math.abs(this.player.x - c.x) < 120) {
+      c.state = "leave"; c.boarded = true; c.t = 0; this.player.hidden = true; this.autoBoard = false;
+      Snd.play("vroom"); Snd.play("honk"); this.fx.text("Hadi gidelim!", c.x, GROUND_Y - 170, WHITE, 28);
+    } else if (fromTap) this.autoBoard = true;   // Dokununca çocuk arabaya kendisi yürür
+    else this.fx.text("Arabaya yaklaş!", this.player.x, GROUND_Y - 130, "#ffe678", 21, 0.8);
+  }
+  updCar(dt) {
+    const c = this.car; c.t += dt;
+    if (c.state === "arrive") { c.x += 420 * dt; c.wheel += 420 * dt / 21; if (c.x >= 330) { c.x = 330; c.state = "wait"; this.fx.dust(c.x - 100, GROUND_Y, 8); } }
+    else if (c.state === "leave") {
+      const sp = 200 + c.t * 700; c.x += sp * dt; c.wheel += sp * dt / 21;
+      if (Math.random() < 0.5) this.fx.add(c.x - 115, GROUND_Y - 25, -80, -30, "#d2d2dc", { size: 8, life: 0.6, kind: "smoke" });
+      if (c.x > W + 200) this.finish();
+    }
+  }
+  finish() {
+    const bonus = this.stonesLeft * 5; G.stats.score += bonus;
+    this.complete([`Kaçan kuş: ${this.scaredHere}`, `Kalan taş bonusu: +${bonus}`, `Bu bölümde kazanılan: ${G.stats.score - this.scoreStart} puan`]);
+  }
+  drawWorld(g) {
+    blitL(g, this.sky, 0, 0); drawSun(g, 110, 125, this.t); this.clouds.draw(g); blitL(g, this.scene, 0, 0);
+    for (const p of this.piles) {
+      [[-10, 0], [8, 0], [0, -10]].forEach(([dx, dy], i) => drawStone(g, p.x + dx, GROUND_Y - 8 + dy, 9, i));
+      txt(g, "Taş!", p.x, GROUND_Y - 45 + Math.sin(p.t * 5) * 3, 19, WHITE);
+    }
+    for (const c of this.chicks) c.draw(g);
+    for (const e of this.eggs) e.draw(g);
+    if (this.car) drawCar(g, this.car.x, GROUND_Y + 6, this.car.wheel, this.car.boarded);
+    const aiming = this.charging && this.phase === "play";
+    this.player.draw(g, aiming || (this.stonesLeft > 0 && this.player.throwT <= 0));
+    if (this.car && this.car.state === "wait") {
+      const bob = Math.abs(Math.sin(this.t * 5)) * 10, x = this.car.x;
+      poly(g, [[x - 18, GROUND_Y - 200 - bob], [x + 18, GROUND_Y - 200 - bob], [x, GROUND_Y - 170 - bob]], "#ffe63c", OUT, 2);
+      txt(g, TOUCH ? "ARABAYA DOKUN!" : "ARABAYA BİN! (E / Boşluk)", x + 40, GROUND_Y - 225 - bob, 25, "#fff078");
+    }
+    const order = this.birds.slice().sort((a, b) => (["perched", "stunned"].includes(a.state) ? 0 : 1) - (["perched", "stunned"].includes(b.state) ? 0 : 1));
+    for (const b of order) b.draw(g);
+    for (const s of this.stones) s.draw(g);
+    this.fx.draw(g);
+    if (aiming) this.drawAim(g);
+    if (this.phase === "play" && this.throws < 2 && this.level === 1)
+      txt(g, TOUCH ? "Ekrana BAS ve TUT: güç topla  •  Parmağını kaydır: nişan al  •  BIRAK: fırlat" : "Fareye BASILI TUT: güç topla  •  BIRAK: taşı fırlat  •  A/D: yürü", W / 2 + (TOUCH ? 120 : 0), H - 34, 21, WHITE);
+  }
+  drawAim(g) {
+    const v = this.throwVel(), steps = Math.floor(this.cfg.preview * (TOUCH ? 1.3 : 1) / 0.04);
+    for (let i = 1; i < steps; i++) {
+      const t = i * 0.04, px = v.x + v.vx * t, py = v.y + v.vy * t + 0.5 * GRAVITY * t * t;
+      if (py > GROUND_Y) break;
+      const r = Math.max(2, 5 - Math.floor(i / 6)); circ(g, px, py, r + 1, OUT); circ(g, px, py, r, WHITE);
+    }
+    const bx = this.player.x - 40, by = GROUND_Y - 135;
+    rrect(g, bx - 2, by - 2, 84, 16, 7, OUT); rrect(g, bx, by, 80, 12, 6, "#3c3c50");
+    if (this.charge > 0) rrect(g, bx, by, 80 * this.charge, 12, 6, rgb(lerpC([120, 230, 120], [255, 80, 60], this.charge)));
+    if (this.charge >= 1 && Math.floor(this.t * 8) % 2 === 0) txt(g, "TAM GÜÇ!", this.player.x, by - 14, 18, "#ffe65a");
+  }
+  drawHud(g) { this.hud.draw(g, { level: this.level, name: this.cfg.name, stones: this.stonesLeft, scared: this.scaredHere, goal: this.goal, healthLabel: "Can", combo: this.combo }); }
+}
+
+// ------------------------------------------------------------- Bölüm 3: araba kaçışı
+class EscapeLevel extends PlayScene {
+  constructor() {
+    super(3);
+    Object.assign(this, buildRoadLayers(11));
+    Object.assign(this, { clouds: new Clouds(6), length: this.cfg.length, cam: 0, car: new Car(300), objs: [], divers: [], bombers: [], airEggs: [], swarm: new Swarm(),
+      nextObj: 1100, diverT: 3.5, bomberT: 9, distAcc: 0, finishSpawned: false, coins: 0, dodges: 0, t: 0, playT: 0 });
+    G.stats.health = MAX_HEALTH;
+    this.pad = new TouchPad([
+      { id: "left", x: 80, y: 640, r: 52, label: "◀" }, { id: "right", x: 205, y: 640, r: 52, label: "▶" },
+      { id: "brake", x: 935, y: 650, r: 50, label: "FREN", size: 19 }, { id: "gas", x: 1060, y: 640, r: 58, label: "GAZ", size: 23 },
+      { id: "jump", x: 1190, y: 555, r: 62, label: "ZIPLA", size: 21 },
+    ]);
+    Snd.music("music_action");
+  }
+  startPlay() { super.startPlay(); this.showBanner("KAÇ!", 1.5, "#ff785a"); Snd.play("honk"); Snd.play("vroom"); }
+  doJump() { if (this.car.jump()) { Snd.play("jump"); this.fx.dust(this.car.x - 60, CAR_GROUND, 6); } }
+  playKey(code) { if (code === "Space") this.doJump(); else if (code === "KeyW" || code === "ArrowUp") Snd.play("vroom", 0.7); }
+  playDown(p) { const b = this.pad.find(p); if (b === "jump") this.doJump(); if (b === "gas") Snd.play("vroom", 0.7); return !!b; }
+  controls() {
+    return { accel: Input.held("gas") || Input.key("KeyW", "ArrowUp"), brake: Input.held("brake") || Input.key("KeyS", "ArrowDown"),
+             left: Input.held("left") || Input.key("KeyA", "ArrowLeft"), right: Input.held("right") || Input.key("KeyD", "ArrowRight") };
+  }
+  progress() { return Math.min(1, this.cam / this.length); }
+  onPause() { Snd.engine(null); }
+  hurt(amount, text) {
+    const c = this.car; if (c.invT > 0) return false;
+    G.stats.health = Math.max(0, G.stats.health - amount); c.damage(); this.shake = 10; Snd.play("hurt");
+    this.fx.text(text, c.x, CAR_GROUND - 150, "#ff7878", 27, 0.9); this.fx.feathers(c.x, CAR_GROUND - 80, WHITE, 4);
+    if (G.stats.health <= 0) this.fail("Araba kuşlara yenildi!");
+    return true;
+  }
+  addPts(pts, text, x, y, color = "#fff078") { G.stats.score += pts; this.fx.text(`${text} +${pts}`, x, y, color, 24, 1.0); Snd.play("point"); }
+  spawnObjs() {
+    const p = this.progress();
+    while (this.nextObj < this.cam + W + 200 && this.nextObj < this.length - 400) {
+      const wx = this.nextObj, kind = weighted({ rock: 30, bigrock: 8 + 16 * p, egg: 14, puddle: 12, birdblock: 12 + 12 * p, coin: 20, wrench: 6 });
+      if (kind === "coin") { const air = pick([0, 0, 110]); for (let i = 0, n = randi(3, 5); i < n; i++) this.objs.push(new RoadObj("coin", wx + i * 55, air)); }
+      else {
+        this.objs.push(new RoadObj(kind, wx));
+        if ((kind === "rock" || kind === "bigrock") && Math.random() < 0.45) for (let i = 0; i < 3; i++) this.objs.push(new RoadObj("coin", wx - 55 + i * 55, 120 + (i === 1 ? 30 : 0)));
+      }
+      this.nextObj += Math.max(320, rand(430, 720) * (1 - 0.35 * p));
+    }
+    if (!this.finishSpawned && this.cam + W + 200 > this.length) { this.finishSpawned = true; this.objs.push(new RoadObj("finish", this.length)); }
+  }
+  spawnAir(dt) {
+    const p = this.progress(); if (p > 0.96) return;
+    this.diverT -= dt;
+    if (this.diverT <= 0) { this.diverT = Math.max(1.1, 3.3 - 2.2 * p) * rand(0.8, 1.2); this.divers.push(new Diver(clamp(this.car.x + rand(-60, 180), 160, W - 200), CAR_GROUND - 70, pick(["blue", "yellow", "red", "red"]), 520 + 320 * p)); Snd.play("angry", 0.6); }
+    if (this.playT > 8) { this.bomberT -= dt; if (this.bomberT <= 0) { this.bomberT = Math.max(3, 8 - 4.5 * p) * rand(0.8, 1.2); this.bombers.push(new Bomber(rand(110, 190), pick(["yellow", "red"]), 260 + 140 * p)); } }
+  }
+  world(dt) {
+    this.t += dt; const car = this.car;
+    if (this.phase === "intro") { car.speed = 0; this.clouds.update(dt); Snd.engine(0.8, 0.5); return; }
+    if (this.phase === "complete") { car.speed = CAR_CRUISE; car.x += 260 * dt; car.update(dt, {}); this.cam += car.speed * dt; this.clouds.update(dt, car.speed); this.divers = []; this.bombers = []; return; }
+    this.playT += dt;
+    if (car.update(dt, this.controls()) === "land") { this.fx.dust(car.x - 60, CAR_GROUND, 6); this.fx.dust(car.x + 60, CAR_GROUND, 6); Snd.play("thud", 0.6); }
+    this.cam += car.speed * dt; this.clouds.update(dt, car.speed);
+    const ratio = (car.speed - 160) / (CAR_MAXS - 160);
+    Snd.engine(0.8 + ratio * 1.3, 0.6 + 0.4 * ratio);
+    this.distAcc += car.speed * dt / 12 * (1 + ratio);
+    if (this.distAcc >= 1) { G.stats.score += Math.floor(this.distAcc); this.distAcc -= Math.floor(this.distAcc); }
+    if (Math.random() < 0.4) this.fx.add(car.x - 118, car.y - 30, -car.speed * 0.3 - 40, -20, "#d2d2dc", { size: 7, life: 0.5, kind: "smoke" });
+    this.spawnObjs(); this.spawnAir(dt); this.updObjs(dt); this.updAir(dt); this.updSwarm(dt);
+    if (this.cam + car.x >= this.length) this.finish();
+  }
+  updObjs(dt) {
+    const car = this.car, low = car.low(), body = car.body();
+    for (const o of this.objs) {
+      o.update(dt, this.cam, car.x, this.fx);
+      if (o.hit || o.kind === "finish") continue;
+      const r = o.rect(this.cam), k = o.kind, cx = r.x + r.w / 2;
+      if (k === "coin" || k === "wrench") {
+        if (overlap(body, r)) {
+          o.hit = true; o.alive = false; Snd.play("pickup");
+          if (k === "coin") { this.coins++; this.addPts(50, "Yıldız", cx, r.y - 10); this.fx.stars(cx, r.y + r.h / 2, 5); }
+          else { G.stats.health = Math.min(MAX_HEALTH, G.stats.health + 25); this.fx.text("Tamir +25", cx, r.y - 20, "#8cffa0", 27); }
+        }
+        continue;
+      }
+      if (overlap(low, r)) {
+        o.hit = true;
+        if (k === "rock") { this.hurt(12, "Taş!"); this.fx.dust(cx, CAR_GROUND, 10, "#aaaab4"); Snd.play("thud"); o.alive = false; }
+        else if (k === "bigrock") { this.hurt(18, "Koca taş!"); this.fx.dust(cx, CAR_GROUND, 14, "#aaaab4"); Snd.play("hit"); o.alive = false; }
+        else if (k === "egg") { Snd.play("egg_crack"); this.fx.yolk(cx, CAR_GROUND - 15, CAR_GROUND); this.splats.add(2.0); car.splatT = 2.5; car.slowT = Math.max(car.slowT, 1); if (car.invT <= 0) this.hurt(4, "Yumurta!"); o.alive = false; }
+        else if (k === "puddle") { car.slowT = Math.max(car.slowT, 1.6); car.speed *= 0.8; this.fx.text("Kaygan!", cx, CAR_GROUND - 120, "#ffe678", 24, 0.8); }
+        else if (k === "birdblock") { this.hurt(10, "Kuş barikatı!"); for (const b of o.birds) if (!b.fly) { b.fly = true; b.vy = -450; b.stay = false; } this.fx.feathers(cx, CAR_GROUND - 30, WHITE, 10); Snd.play("flap"); }
+      } else if (r.x + r.w < car.x - 110 && ["rock", "bigrock", "egg", "birdblock"].includes(k) && !o.passed) {
+        o.passed = true;
+        if (k !== "birdblock" || o.birds.some(b => b.stay && !b.fly)) { this.dodges++; G.stats.score += 10; if (!car.onGround) this.fx.text("Süper zıplama! +10", car.x, CAR_GROUND - 170, "#a0e6ff", 22, 0.9); }
+      }
+    }
+    this.objs = this.objs.filter(o => o.alive);
+  }
+  updAir(dt) {
+    const car = this.car, body = car.body();
+    for (const d of this.divers) {
+      d.update(dt); if (d.t < 0.95 || d.hit) continue;
+      if (!d.veered && overlap(body, d.rect())) { d.hit = true; d.alive = false; this.hurt(10, "Dalış saldırısı!"); this.fx.feathers(d.x, d.y, WHITE, 6); }
+      else if (d.veered && !d.passed && Math.abs(d.x - car.x) < 200) { d.passed = true; this.addPts(25, "Kıl payı!", car.x, CAR_GROUND - 190, "#ffb4dc"); }
+      else if (!d.veered && !d.passed && d.y > d.ty + 20) { d.passed = true; this.dodges++; this.addPts(15, "Atlattın!", d.x, d.y - 40, "#b4ffb4"); }
+    }
+    this.divers = this.divers.filter(d => d.alive);
+    for (const b of this.bombers) b.update(dt, car, (x, y) => this.airEggs.push({ x, y, vx: -60, vy: 50, rot: 0, alive: true }));
+    this.bombers = this.bombers.filter(b => b.alive);
+    for (const e of this.airEggs) {
+      e.vy += 900 * dt; e.x += e.vx * dt; e.y += e.vy * dt; e.rot += dt * 8;
+      if (overlap(body, { x: e.x - 9, y: e.y - 12, w: 18, h: 24 })) {
+        e.alive = false; Snd.play("egg_crack"); this.fx.yolk(e.x, e.y, CAR_GROUND); this.splats.add(); car.splatT = 3;
+        this.fx.text("Görüş kapandı!", car.x, CAR_GROUND - 170, "#ffe678", 22, 1); if (car.invT <= 0) this.hurt(3, "Yumurta!");
+      } else if (e.y >= CAR_GROUND - 6) { e.alive = false; Snd.play("egg_crack", 0.6); this.fx.yolk(e.x, CAR_GROUND - 6, CAR_GROUND); this.objs.push(new RoadObj("puddle", this.cam + e.x)); }
+    }
+    this.airEggs = this.airEggs.filter(e => e.alive);
+  }
+  updSwarm(dt) {
+    if (this.playT < 2.5) return;
+    this.swarm.update(dt, this.car.speed, this.progress());
+    if (this.swarm.x > this.car.x - 110 && this.hurt(6, "Gagalıyorlar!")) { this.swarm.x -= 220; Snd.play("angry"); }
+  }
+  finish() {
+    const bonus = G.stats.health * 5; G.stats.score += bonus + 500;
+    this.complete(["BİTİŞ ÇİZGİSİ! +500", `Dayanıklılık bonusu: +${bonus}`, `Yıldız: ${this.coins}   Atlatılan engel: ${this.dodges}`]);
+    Snd.play("honk");
+  }
+  tile(g, c, factor, y = 0) { const off = ((-this.cam * factor) % W + W) % W; blitL(g, c, off - W, y); blitL(g, c, off, y); }
+  drawWorld(g) {
+    blitL(g, this.sky, 0, 0); drawSun(g, 1120, 125, this.t); this.clouds.draw(g);
+    this.tile(g, this.hills, 0.15); this.tile(g, this.trees, 0.45); this.tile(g, this.road, 1, ROAD_Y - 40);
+    const car = this.car;
+    if (car.speed > 480) { const k = (car.speed - 480) / (CAR_MAXS - 480); for (let i = 0; i <= 6 * k; i++) { const y = (i * 97 + this.t * 900) % 420 + 120, x = ((i * 263 - this.t * 2600) % W + W) % W; line(g, x, y, x + 80, y, WHITE, 2); } }
+    for (const o of this.objs) o.draw(g, this.cam);
+    for (const e of this.airEggs) ell(g, e.x, e.y, 9, 12, e.rot, "#fffaeb", OUT, 2);
+    const sw = Math.max(60, 210 - (CAR_GROUND - car.y) * 0.4);
+    ell(g, car.x, CAR_GROUND + 1, sw / 2, 7, 0, "rgba(0,0,0,0.27)");
+    car.draw(g); this.swarm.draw(g);
+    for (const d of this.divers) d.draw(g);
+    for (const b of this.bombers) b.draw(g);
+    this.fx.draw(g);
+    if (this.phase === "play" && this.swarm.x > car.x - 330 && Math.floor(this.t * 4) % 2 === 0) txt(g, TOUCH ? "Sürü yaklaşıyor! GAZ'a bas!" : "Sürü yaklaşıyor! HIZLAN (W)!", W / 2, 120, 28, "#ff7878");
+    if (this.phase === "play" && this.playT < 6 && !TOUCH) txt(g, "W: hızlan  •  S: yavaşla  •  A/D: ileri-geri  •  BOŞLUK: zıpla", W / 2, H - 24, 21, WHITE);
+  }
+  drawHud(g) { this.hud.draw(g, { level: 3, name: this.cfg.name, speed: Math.floor(this.car.speed * 0.25), healthLabel: "Dayanıklılık", progress: this.progress() }); }
+}
+
+// ------------------------------------------------------------- Menü
+class MenuScene {
+  constructor() {
+    const bg = buildThrowBackground(42, [130, 360, 930, 1170]); Object.assign(this, bg);
+    this.clouds = new Clouds(7); this.t = 0; this.shake = 0;
+    const rng = seeded(5), kinds = ["blue", "yellow", "red", "blue", "yellow", "gold", "red", "blue"];
+    const ps = this.perches.slice().sort(() => rng() - 0.5).slice(0, 10);
+    this.perched = ps.map((p, i) => { const k = kinds[i % kinds.length]; return { k, x: p[0], y: p[1] - BT[k].size * 1.1, ph: rng() * 6 }; });
+    this.flyers = Array.from({ length: 6 }, (_, i) => { const b = new Bird(pick(["blue", "yellow", "red"]), -100 - i * 60, 0); b.baseY = 255 + (i % 2) * 30; b.vx = 140; b.t = i * 0.4; b.set("flock"); return b; });
+    const cx = W / 2;
+    this.play = new Button(cx - 190, 300, 380, 110, "OYNA", UI_GREEN, 64);
+    this.help = new Button(cx - 400, 435, 250, 62, "Nasıl Oynanır?", UI_BLUE, 26);
+    this.sound = new Button(cx - 125, 435, 250, 62, "Ses Ayarları", UI_ACCENT, 26);
+    this.full = new Button(cx + 150, 435, 250, 62, TOUCH ? "Ana Ekrana Ekle" : "Tam Ekran", UI_PINK, 26);
+    this.close = new Button(cx - 110, 590, 220, 58, "Kapat", UI_BLUE, 26);
+    this.sp = new SoundPanel(cx - 245, 330);
+    this.overlay = null;
+    Snd.music("music_calm");
+  }
+  key(code) {
+    if (this.overlay) { if (code === "Escape") this.overlay = null; return; }
+    if (code === "Enter" || code === "Space") { Snd.play("click"); G.newGame(); }
+  }
+  down(p) {
+    if (this.overlay) {
+      if (this.close.hit(p)) { Snd.play("click"); this.overlay = null; }
+      else if (this.overlay === "sound") this.sp.tap(p);
+      return true;
+    }
+    if (this.play.hit(p)) { Snd.play("click"); G.newGame(); }
+    else if (this.help.hit(p)) { Snd.play("click"); this.overlay = "help"; }
+    else if (this.sound.hit(p)) { Snd.play("click"); this.overlay = "sound"; }
+    else if (this.full.hit(p)) {
+      Snd.play("click");
+      const el = document.documentElement, req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (!TOUCH && req) { try { const r = req.call(el); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
+      else this.overlay = "install";
+    }
+    return true;
+  }
+  move() {} up() {}
+  update(dt) {
+    this.t += dt; this.clouds.update(dt);
+    for (const b of this.flyers) { b.update(dt, null); b.alive = true; if (b.x > W + 80) b.x = -80; }
+    if (Math.random() < 0.5 * dt) Snd.play("chirp_" + pick(["blue", "yellow", "red"]), 0.4);
+  }
+  draw(g) {
+    blitL(g, this.sky, 0, 0); drawSun(g, 110, 115, this.t); this.clouds.draw(g); blitL(g, this.scene, 0, 0);
+    for (const b of this.perched) {
+      const dx = Input.last.x - b.x, dy = Input.last.y - b.y, d = Math.hypot(dx, dy) || 1;
+      drawBird(g, b.k, b.x, b.y - Math.abs(Math.sin(this.t * 3 + b.ph)) * 4, dx > 0 ? 1 : -1, this.t * 2, false, (this.t + b.ph) % 4 < 0.12 ? "blink" : "normal", [dx / d, dy / d], this.t);
+    }
+    for (const b of this.flyers) b.draw(g);
+    drawKid(g, 520, GROUND_Y, 1, 0, -1.6 + Math.sin(this.t * 6) * 0.5, true);
+    // Başlık: harfleri dalgalanan gökkuşağı yazı
+    const title = "Kuşların İntikamı", cols = ["#ff5a5a", "#ffaa3c", "#ffe146", "#78dc6e", "#5aaaff", "#be78ff", "#ff82c8"];
+    g.font = `700 86px ${FONT}`; const widths = [...title].map(ch => g.measureText(ch).width), total = widths.reduce((a, b) => a + b, 0);
+    let x = W / 2 - total / 2;
+    [...title].forEach((ch, i) => { txt(g, ch, x + widths[i] / 2, 150 + Math.sin(this.t * 3 + i * 0.5) * 10, 86, cols[i % cols.length], { w: 700, ol: 6 }); x += widths[i]; });
+    txt(g, "Taş at, kuşları kaçır... ama intikamlarından kaç!", W / 2, 245, 28, WHITE);
+    this.play.draw(g); this.help.draw(g); this.sound.draw(g); this.full.draw(g);
+    if (G.best) txt(g, `Rekor: ${G.best}`, W / 2, 530, 26, "#ffe65a");
+    if (this.overlay === "help") this.drawHelp(g);
+    else if (this.overlay === "sound") {
+      dim(g); panel(g, W / 2 - 300, 200, 600, 420, "rgba(60,60,110,0.96)");
+      txt(g, "SES AYARLARI", W / 2, 250, 40, WHITE, { ol: 3 });
+      txt(g, "Her ses türünü ayrı ayrı aç ya da kapat.", W / 2, 292, 20, "#dcdcff", { ol: 0 });
+      this.sp.draw(g); this.close.y = 540; this.close.draw(g);
+      if (TOUCH) txt(g, "iPhone'un yanındaki sessiz düğmesi açıksa ses duyulmaz.", W / 2, 520, 17, "#ffdc96", { ol: 0 });
+    } else if (this.overlay === "install") {
+      dim(g); panel(g, W / 2 - 400, 140, 800, 470);
+      txt(g, "Uygulama gibi tam ekran oyna", W / 2, 195, 36, "#ff8c3c", { ol: 2 });
+      ["1. Bu sayfayı Safari'de aç.", "2. Alttaki Paylaş düğmesine dokun (kare ve yukarı ok).", "3. \"Ana Ekrana Ekle\"yi seç, sonra \"Ekle\"ye dokun.", "4. Ana ekrandaki kuş simgesinden oyunu aç.", "", "Telefonu yan çevirmeyi unutma!"]
+        .forEach((l, i) => txt(g, l, W / 2 - 340, 260 + i * 44, 25, OUT, { ol: 0, align: "left" }));
+      this.close.y = 525; this.close.draw(g);
+    }
+  }
+  drawHelp(g) {
+    dim(g); panel(g, W / 2 - 540, 60, 1080, 610);
+    txt(g, "NASIL OYNANIR?", W / 2, 102, 42, "#ff8c3c", { ol: 3 });
+    const lines = TOUCH ? [
+      "Ekrana BAS ve TUT: güç toplanır. Parmağını kaydırarak nişan al, BIRAK: taş uçar.",
+      "Taşın yakınından geçtiği kuşlar korkup kaçar ve puan kazandırır.",
+      "Doğrudan isabet: kuş ağlar, yumurta atar, arkadaşlarını çağırır!",
+      "Arka arkaya başarılı atışlar KOMBO çarpanını büyütür.",
+      "Bölüm 2'de kuşlar dalış yapar: ◀ ▶ düğmeleriyle kaç ya da taşla savuştur.",
+      "Bölüm 3 araba: GAZ ve FREN ile hızı ayarla, ◀ ▶ ile sür, ZIPLA ile engelleri aş.",
+      "Sağ üstteki düğmeler: duraklat, baştan başla, ses.",
+    ] : [
+      "Fare: BASILI TUT güç topla, sürükleyerek nişan al, BIRAK taşı fırlat.",
+      "Taşın yakınından geçtiği kuşlar korkup kaçar ve puan kazandırır.",
+      "Doğrudan isabet: kuş ağlar, yumurta atar, arkadaşlarını çağırır!",
+      "Arka arkaya başarılı atışlar KOMBO çarpanını büyütür.",
+      "Bölüm 2'de kuşlar dalış yapar: A/D ile kaç ya da taşla savuştur.",
+      "Bölüm 3 araba: W hızlan, S yavaşla, A/D ileri-geri, BOŞLUK zıpla.",
+      "P / ESC: duraklat     M: sesi kapat",
+    ];
+    lines.forEach((l, i) => txt(g, l, W / 2 - 490, 150 + i * 38, 22, OUT, { ol: 0, align: "left" }));
+    ["blue", "yellow", "red", "gold"].forEach((k, i) => {
+      const x = W / 2 - 410 + i * 240;
+      drawBird(g, k, x, 470, 1, this.t * 2, false, "normal", [1, 0], this.t, 1.4);
+      txt(g, BT[k].name, x + 20, 525, 21, OUT, { ol: 0 }); txt(g, `${BT[k].points} puan`, x + 20, 555, 24, "#ff8c3c", { ol: 0 });
+    });
+    this.close.y = 590; this.close.draw(g);
+  }
+}
+
+// ------------------------------------------------------------- Oyun sonu
+class GameOverScene {
+  constructor(win, reason) {
+    Object.assign(this, buildThrowBackground(77, [200, 1080]));
+    Object.assign(this, { win, reason, t: 0, shake: 0, fx: new Effects(), clouds: new Clouds(5), newRecord: G.stats.score > 0 && G.stats.score >= G.best });
+    const cx = W / 2;
+    this.btns = win ? { new: new Button(cx - 330, 600, 310, 64, "Tekrar Oyna", UI_GREEN, 28), menu: new Button(cx + 20, 600, 310, 64, "Ana Menü", UI_BLUE, 28) }
+      : { retry: new Button(cx - 490, 600, 310, 64, "Bölümü Tekrar Dene", UI_GREEN, 25), new: new Button(cx - 155, 600, 310, 64, "Yeniden Başla", UI_ACCENT, 27), menu: new Button(cx + 180, 600, 310, 64, "Ana Menü", UI_BLUE, 27) };
+    Snd.music(win ? "music_victory" : "music_gameover", false);
+  }
+  key(code) { if (code === "Enter" || code === "Space" || code === "KeyR") G.newGame(); else if (code === "Escape") G.toMenu(); }
+  down(p) {
+    if (this.t < 0.6) return true;
+    for (const [k, b] of Object.entries(this.btns)) if (b.hit(p)) { Snd.play("click"); if (k === "new") G.newGame(); else if (k === "retry") G.retryLevel(); else G.toMenu(); break; }
+    return true;
+  }
+  move() {} up() {}
+  update(dt) {
+    this.t += dt; this.clouds.update(dt);
+    if (this.win && Math.random() < 12 * dt) this.fx.add(rand(0, W), -10, rand(-40, 40), rand(60, 160), pick(["#ff5a78", "#ffdc46", "#78a0ff", "#78e68c"]), { size: randi(4, 7), life: 4, g: 40, kind: "star", vrot: 4 });
+    this.fx.update(dt);
+  }
+  draw(g) {
+    blitL(g, this.sky, 0, 0); this.clouds.draw(g); blitL(g, this.scene, 0, 0);
+    ["blue", "yellow", "red", "gold", "blue"].forEach((k, i) => {
+      const x = 150 + i * 250, y = GROUND_Y - 30 - Math.abs(Math.sin(this.t * (this.win ? 2 : 3) + i)) * (this.win ? 6 : 25);
+      drawBird(g, k, x, y, i % 2 ? 1 : -1, this.t * 4, false, this.win ? "cry" : "angry", [0, 0], this.t, 1.6);
+      if (this.win) { const px = x + 30, w = Math.sin(this.t * 6 + i) * 4; line(g, px, y - 10, px, y - 70, OUT, 3); poly(g, [[px, y - 70], [px + 30, y - 64 + w], [px, y - 52]], WHITE, OUT, 2); }
+    });
+    this.fx.draw(g);
+    const k = easeOutBack(Math.min(1, this.t / 0.6)), cy = -300 + (H / 2 - 30 + 300) * k, top = cy - 225, s = G.stats;
+    panel(g, W / 2 - 380, top, 760, 450);
+    txt(g, this.win ? "TEBRİKLER! KAÇTIN!" : "OYUN BİTTİ", W / 2, top + 55, 52, this.win ? "#ffc832" : "#ff6464", { ol: 4 });
+    txt(g, this.win ? "Kuşlar pes etti ve beyaz bayrak salladı!" : (this.reason || "Kuşlar bu sefer kazandı!"), W / 2, top + 108, 24, OUT, { ol: 0 });
+    [["Toplam Puan", s.score], ["Kaçan Kuş Sayısı", s.birdsScared], ["Tamamlanan Bölüm", `${s.levelsCompleted} / ${LAST_LEVEL}`], ["En İyi Kombo", s.bestCombo], ["Rekor", G.best]]
+      .forEach(([l, v], i) => { const y = top + 170 + i * 46; txt(g, l, W / 2 - 260, y, 27, OUT, { ol: 0, align: "left" }); txt(g, String(v), W / 2 + 260, y, 30, "#ff8c3c", { align: "right" }); });
+    if (this.newRecord && Math.floor(this.t * 3) % 2 === 0) txt(g, "YENİ REKOR!", W / 2 + 300, top + 18, 30, "#ff5aa0", { ol: 3 });
+    if (this.t > 0.6) for (const b of Object.values(this.btns)) b.draw(g);
+  }
+}
+
+// =====================================================================
+//  OYUN YÖNETİCİSİ ve DÖNGÜ
+// =====================================================================
+const G = {
+  stats: null, best: parseInt(storeGet("ki_best", "0"), 10) || 0, scene: null, checkpoint: null,
+  resetStats() { this.stats = { score: 0, birdsScared: 0, levelsCompleted: 0, health: MAX_HEALTH, level: 1, bestCombo: 0 }; },
+  startLevel(n) {
+    this.stats.level = n; this.checkpoint = { ...this.stats }; Snd.engine(null);
+    Input.ptrs.forEach(p => { p.btn = null; });
+    this.scene = LEVELS[n].kind === "throw" ? new ThrowLevel(n) : new EscapeLevel();
+  },
+  newGame() { this.resetStats(); this.startLevel(1); },   // Bütün değerler sıfırlanır
+  retryLevel() { const lv = this.checkpoint.level; this.stats = { ...this.checkpoint, health: MAX_HEALTH }; this.startLevel(lv); },
+  toMenu() { Snd.engine(null); this.scene = new MenuScene(); },
+  gameOver(win, reason = "") {
+    if (this.stats.score > this.best) { this.best = this.stats.score; storeSet("ki_best", String(this.best)); }
+    Snd.engine(null); this.scene = new GameOverScene(win, reason);
+  },
+};
+
+const cv = document.getElementById("game"), ctx = cv.getContext("2d");
+let S = 1, OX = 0, OY = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+  const w = window.innerWidth, h = window.innerHeight;
+  cv.width = Math.round(w * DPR); cv.height = Math.round(h * DPR); cv.style.width = w + "px"; cv.style.height = h + "px";
+  S = Math.min(w / W, h / H); OX = (w - W * S) / 2; OY = (h - H * S) / 2;
+}
+const portrait = () => TOUCH && window.innerHeight > window.innerWidth;
+function toLogical(e) { return { x: (e.clientX - OX) / S, y: (e.clientY - OY) / S, id: e.pointerId, mouse: e.pointerType === "mouse" }; }
+
+cv.addEventListener("pointerdown", e => {
+  e.preventDefault(); Snd.unlock();
+  if (e.pointerType === "touch") Input.touchSeen = true;
+  try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+  const p = toLogical(e); Input.last = p;
+  if (portrait()) return;
+  const sc = G.scene, padBtn = sc.pad && (sc.phase === "play" || sc.phase === "car") && !sc.paused && Input.touchSeen ? sc.pad.find(p) : null;
+  Input.ptrs.set(e.pointerId, { x: p.x, y: p.y, btn: padBtn });
+  if (padBtn) { if (sc instanceof EscapeLevel) sc.playDown(p); return; }   // Ekran düğmesi: basılı tutulduğu sürece etkin
+  sc.down(p);
+}, { passive: false });
+cv.addEventListener("pointermove", e => {
+  const p = toLogical(e); Input.last = p;
+  const rec = Input.ptrs.get(e.pointerId);
+  if (rec) { rec.x = p.x; rec.y = p.y; if (rec.btn) return; }
+  if (G.scene.move) G.scene.move(p);
+});
+const endPtr = e => {
+  const rec = Input.ptrs.get(e.pointerId); Input.ptrs.delete(e.pointerId);
+  const p = toLogical(e);
+  if (rec && rec.btn) return;
+  if (G.scene.up) G.scene.up(p);
+};
+cv.addEventListener("pointerup", endPtr);
+cv.addEventListener("pointercancel", endPtr);
+// iOS'ta ses ancak bir dokunuşun sonunda açılabiliyor
+document.addEventListener("touchend", () => Snd.unlock(), { passive: true });
+document.addEventListener("click", () => Snd.unlock());
+cv.addEventListener("contextmenu", e => e.preventDefault());
+document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
+document.addEventListener("gesturestart", e => e.preventDefault());
+window.addEventListener("keydown", e => {
+  if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
+  Snd.unlock();
+  if (!e.repeat) G.scene.key(e.code);
+  Input.keys.add(e.code);
+});
+window.addEventListener("keyup", e => Input.keys.delete(e.code));
+window.addEventListener("blur", () => { Input.keys.clear(); Input.ptrs.clear(); autoPause(); });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { autoPause(); if (Snd.ctx) Snd.ctx.suspend().catch(() => {}); }
+  else if (Snd.ctx) Snd.ctx.resume().catch(() => {});
+});
+function autoPause() { const s = G.scene; if (s && s.togglePause && !s.paused && (s.phase === "play" || s.phase === "car")) s.togglePause(); }
+window.addEventListener("resize", resize);
+
+function drawRotateHint(g) {
+  g.fillStyle = "#1b2440"; g.fillRect(-W, -H, W * 3, H * 3);
+  const t = performance.now() / 1000, a = Math.min(1, (t % 2.4) / 1.2) * Math.PI / 2;
+  g.save(); g.translate(W / 2, H / 2 - 60); g.rotate(-a);
+  rrect(g, -55, -95, 110, 190, 18, "#3c4670", WHITE, 5); circ(g, 0, 78, 7, WHITE); g.restore();
+  txt(g, "Telefonu yan çevir", W / 2, H / 2 + 110, 64, "#ffe65a", { ol: 5 });
+  txt(g, "Kuşların İntikamı yatay ekranda oynanır", W / 2, H / 2 + 180, 36, WHITE, { ol: 3 });
+}
+
+let lastT = performance.now(), acc = 0;
+function frame(now) {
+  let dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  const g = ctx, port = portrait();
+  if (port) autoPause();
+  else {
+    // Sabit adımlı güncelleme: her cihazda aynı fizik
+    acc += dt; let n = 0;
+    while (acc >= FPS_DT && n < 4) { G.scene.update(FPS_DT); acc -= FPS_DT; n++; }
+    if (n === 4) acc = 0;
+  }
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = "#1b2440"; g.fillRect(0, 0, cv.width, cv.height);
+  if (port) {   // Dikey ekranda dönme ipucu, ekranın tamamına sığacak şekilde
+    const s2 = Math.min(cv.width / DPR / W, cv.height / DPR / H) * 1.6;
+    g.setTransform(s2 * DPR, 0, 0, s2 * DPR, (cv.width / DPR - W * s2) / 2 * DPR, (cv.height / DPR - H * s2) / 2 * DPR);
+    drawRotateHint(g);
+  } else {
+    const sh = G.scene.shake || 0, sx = sh > 0.5 ? rand(-sh, sh) : 0, sy = sh > 0.5 ? rand(-sh, sh) : 0;
+    g.setTransform(S * DPR, 0, 0, S * DPR, (OX + sx * S) * DPR, (OY + sy * S) * DPR);
+    g.save(); g.beginPath(); g.rect(0, 0, W, H); g.clip();
+    G.scene.draw(g);
+    g.restore();
+  }
+  requestAnimationFrame(frame);
+}
+
+function start() {
+  resize();
+  LAYER_K = clamp(Math.max(screen.width, screen.height) / W * (window.devicePixelRatio || 1), 1, 2);
+  G.resetStats();
+  G.scene = new MenuScene();
+  requestAnimationFrame(frame);
+  window.__KI = { G, Snd, Input };   // Otomatik testler için
+}
+if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(start); else start();
+</script>

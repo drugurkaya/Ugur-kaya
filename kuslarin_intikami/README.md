@@ -19,6 +19,28 @@ python main.py
 
 (macOS / Linux'ta `python` yerine `python3` yazmanız gerekebilir.)
 
+**Komut yazmadan:** Windows'ta `Oyunu Baslat.bat` dosyasına çift tıklayın;
+pygame kurulu değilse kendisi kurar, sonra oyunu açar.
+
+> `ModuleNotFoundError: No module named 'pygame'` hatası alırsanız
+> `python -m pip install pygame` komutunu çalıştırın (o da olmazsa
+> `python -m pip install pygame-ce`).
+
+## iPhone / tarayıcı sürümü
+
+`web/index.html`, oyunun dokunmatik kontrollü HTML5 sürümüdür (aynı üç bölüm,
+aynı kuşlar, sesler ve puanlar). Kurulum gerekmez; iPhone'da Safari ile açılır.
+
+- **Taş atma:** ekrana bas ve tut (güç toplanır), parmağını kaydırarak nişan al, bırak.
+- **Yürüme:** sol alttaki ◀ ▶ düğmeleri. Bölüm 2 sonunda arabaya dokununca çocuk arabaya biner.
+- **Araba:** ◀ ▶ ileri-geri, GAZ / FREN hız, ZIPLA engelleri aşar.
+- Telefonu **yan çevirin**; dikey tutunca oyun duraklar ve uyarı çıkar.
+- Tam ekran için Safari'de **Paylaş → Ana Ekrana Ekle**.
+- Ses gelmiyorsa iPhone'un yanındaki sessiz düğmesini kapatın.
+
+Kendi bağlantınızla yayınlamak için `web` klasörünü GitHub Pages veya herhangi
+bir statik barındırmaya yükleyin (`index.html` + `icon.png` yeterli).
+
 ## Windows için çift tıklanabilir EXE
 
 **Kolay yol:** `build_exe.bat` dosyasına çift tıklayın. Birkaç dakika sonra
