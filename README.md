@@ -45,3 +45,16 @@ Bu yüzden:
   Yedek randevuları, ameliyatları ve icap takvimini içerir. Gerekirse "Yedekten yükle" ile geri getirebilirsiniz.
 
 Yedek dosyaları hasta bilgisi içerir. Güvenli bir yerde saklayın.
+
+---
+
+## 🐦 Kuşların İntikamı (oyun)
+
+Bu depoda ayrıca Python + Pygame ile yazılmış bir masaüstü oyunu bulunur:
+[`kuslarin_intikami/`](kuslarin_intikami/README.md). Çalıştırmak için:
+
+```bash
+cd kuslarin_intikami
+python -m pip install -r requirements.txt
+python main.py
+```
