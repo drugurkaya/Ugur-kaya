@@ -103,3 +103,11 @@ Ses tanıma ve Kestirmeler için uygulamanın bir web adresinden açılması ger
 GitHub'da depo → **Settings → Pages → Build and deployment → Branch** olarak bu dalı ve `/ (root)`
 seçin. Birkaç dakika sonra adres `https://<kullanıcı-adı>.github.io/<depo>/odeme_takip/` olur.
 Bu adresi iPhone'da Safari ile açın, Ayarlar sekmesindeki kısayol adımlarını uygulayın.
+
+---
+
+## 🏠 Unified Smart Home — "Evim" (akıllı ev, iPhone)
+
+[`unified_smart_home/`](unified_smart_home/README.md): Xenon Smart, Sonoff ve diğer markalardaki akıllı ev
+cihazlarını **Home Assistant** üzerinden tek bir Türkçe iPhone uygulamasında (PWA) birleştirir. Uygulama
+GitHub Pages'ten değil, evinizdeki Home Assistant'tan sunulur (kurulum ve güvenlik için klasördeki README).

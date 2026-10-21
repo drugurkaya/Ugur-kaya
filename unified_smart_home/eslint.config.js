@@ -12,7 +12,7 @@ export default [
         TextEncoder: 'readonly', TextDecoder: 'readonly', Intl: 'readonly', requestAnimationFrame: 'readonly',
         setTimeout: 'readonly', clearTimeout: 'readonly', setInterval: 'readonly', clearInterval: 'readonly', setImmediate: 'readonly',
         console: 'readonly', globalThis: 'readonly', structuredClone: 'readonly', Response: 'readonly', process: 'readonly',
-        self: 'readonly', caches: 'readonly',
+        self: 'readonly', caches: 'readonly', Event: 'readonly', getComputedStyle: 'readonly',
       },
     },
     rules: {

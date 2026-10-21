@@ -342,7 +342,7 @@ for (const [device, scheme] of [
   ['iPhone 15 Pro Max', 'dark'],
   ['iPhone 13', 'dark'],
 ]) {
-  test(`yerleşim: ${device} (${scheme === 'dark' ? 'koyu' : 'açık'} mod) — yatay taşma yok, dokunma alanları ≥44px`, { skip }, async () => {
+  test(`yerleşim: ${device} (${scheme === 'dark' ? 'koyu' : 'açık'} mod) — yatay taşma yok, dokunma alanları ≥32px`, { skip }, async () => {
     const page = await loggedIn({ device, colorScheme: scheme });
     for (const hash of ['#/home', '#/rooms', '#/device/climate.hvac', '#/automations', '#/energy', '#/system/health', '#/add']) {
       await go(page, hash);

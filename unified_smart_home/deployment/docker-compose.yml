@@ -1,0 +1,20 @@
+# YALNIZCA evde henüz Home Assistant yoksa ve bir Linux sunucu / mini PC / Raspberry Pi üzerinde
+# Docker ile kurmak istiyorsanız kullanın. Zaten HA OS kullanıyorsanız GEREKMEZ.
+# Resmî kılavuz: https://www.home-assistant.io/installation/linux#docker-compose
+#
+# Not: Docker kurulumunda HA "eklenti" (add-on) desteği yoktur; Matter Server, Mosquitto, Zigbee2MQTT
+# gibi bileşenler ayrı kapsayıcı olarak kurulmalıdır. Yeni başlayanlar için Home Assistant OS
+# (ör. Home Assistant Green / Raspberry Pi) daha kolaydır.
+services:
+  homeassistant:
+    container_name: homeassistant
+    image: ghcr.io/home-assistant/home-assistant:stable
+    volumes:
+      - ./ha-config:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro
+    restart: unless-stopped
+    privileged: true
+    network_mode: host # mDNS/SSDP keşfi ve HomeKit/Matter için gerekli
+    environment:
+      TZ: Europe/Istanbul
