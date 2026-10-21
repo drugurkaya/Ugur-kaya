@@ -58,3 +58,19 @@ cd kuslarin_intikami
 python -m pip install -r requirements.txt
 python main.py
 ```
+
+---
+
+## 🥊 Çöp Adam Arena (iPhone oyunu)
+
+[`cop_adam_arena/index.html`](cop_adam_arena/index.html): tek dosyalık çubuk adam dövüş oyunu.
+iPhone'da Safari ile açılır, kurulum gerekmez (Paylaş → "Ana Ekrana Ekle" ile uygulama gibi açılır).
+
+- **4 tuş:** ◀ Geri/Blok, ▶ İleri, **Y** Yumruk, **T** Tekme
+- **Kombinasyonlar:** Y-Y-Y Kroşe · ▶-Y Aparkat · T-T Süpürme · ◀-▶-T Dönen Tekme · ▶-▶ Atılma
+- Puan alan her vuruşta alkış, büyük vuruşta ve kombolarda tezahürat
+- Ağır darbeyle yere düşünce kalp atışı sesi, tehlike işareti ve EKG ekranı
+- Her kazanılan seviyede çöp adamın kasları büyür (8 kas seviyesi)
+- Bilgisayarda klavye: ← → , J/Z yumruk, K/X tekme, Esc duraklat
+
+Ses gelmiyorsa iPhone'un sessiz düğmesini kapatın.
