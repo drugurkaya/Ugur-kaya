@@ -80,7 +80,7 @@
     .split { grid-template-columns: 1fr 1fr; align-items: start; }
   }
   .combos { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-  .combos li { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 10px; font-size: 16px; line-height: 1.15; }
+  .combos li { display: grid; grid-template-columns: 108px 1fr; align-items: center; gap: 10px; font-size: 16px; line-height: 1.15; }
   .combos b { font-weight: 800; color: var(--bone); }
   .combos span.d { color: var(--muted); font-size: 14px; }
   .keys { display: flex; gap: 4px; }
@@ -100,6 +100,15 @@
   .cta:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); }
   .cta:focus-visible, .ghost:focus-visible, .btn:focus-visible { outline: 3px solid var(--bone); outline-offset: 3px; }
   @media (max-height: 500px) { h1 { font-size: 46px; } .lead { font-size: 17px; } .card { padding: 14px 18px; gap: 10px; } }
+  .pick { display: grid; gap: 6px; }
+  .faces { display: flex; flex-wrap: wrap; gap: 8px; }
+  .face {
+    width: 46px; height: 46px; padding: 0; border-radius: 50%; overflow: hidden; cursor: pointer;
+    border: 3px solid var(--ink); background: var(--night); box-shadow: 0 0 0 2px transparent;
+    font-family: var(--display); font-size: 15px; color: var(--bone);
+  }
+  .face img { width: 100%; height: 100%; display: block; }
+  .face[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--gold); transform: scale(1.08); }
   .rbody { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
   #flex { width: 150px; height: 160px; background: var(--night); border: 2px solid var(--ink); border-radius: 12px; }
   #rStats { margin: 0; display: grid; grid-template-columns: auto auto; gap: 4px 18px; font-size: 18px; flex: 1; min-width: 200px; font-variant-numeric: tabular-nums; }
@@ -127,6 +136,10 @@
     <div class="split">
       <div style="display:grid;gap:12px">
         <p class="lead">Dört tuşla kombinasyon yap. İsabetli vuruşta seyirci alkışlar, ağır darbede rakip yere serilir. Kazandığın her seviyede kasların büyür.</p>
+        <div class="pick" id="pick" hidden>
+          <p class="tiny">Dövüşçünü seç. Diğer yüzler sırayla rakibin olur.</p>
+          <div class="faces" id="faces"></div>
+        </div>
         <div class="row">
           <button id="startBtn" class="cta">DÖVÜŞE BAŞLA</button>
           <button id="contBtn" class="ghost" hidden>Devam et</button>
@@ -178,6 +191,7 @@
   </div>
 </section>
 
+<script src="yuzler.js"></script>
 <script>
 (() => {
 'use strict';
@@ -234,6 +248,11 @@ const ENEMIES = [
   { n: 'ŞAMPİYON ÇÖP', c: '#e8e2ff', d: '#aaa3cc' },
 ];
 const ROMAN = ['', '', ' II', ' III', ' IV', ' V', ' VI'];
+
+/* ---------- Oyuncu yüzleri (yuzler.js varsa) ---------- */
+const FACES = (window.YUZLER || []).map(f => { const img = new Image(); img.src = f.src; return { id: f.id, img }; });
+const faceById = id => FACES.find(f => f.id === id) || null;
+let pickedFace = null;
 
 /* ---------- Ses: tümü Web Audio ile üretilir ---------- */
 const sfx = {
@@ -516,15 +535,46 @@ function torso(g, hip, sh, lean, s, lw, m, col) {
 }
 function headDraw(g, f, sh, lean, s, lw, m) {
   const ux = sind(lean) * s, uy = -cosd(lean), fx = cosd(lean) * s, fy = sind(lean);
+  const photo = f.face && f.face.img.complete && f.face.img.naturalWidth ? f.face.img : null;
+  const hr = photo ? 20 : HR;
   const nk = { x: sh.x + ux * 6, y: sh.y + uy * 6 };
-  const hx = sh.x + ux * (6 + HR), hy = sh.y + uy * (6 + HR);
+  const hx = sh.x + ux * (6 + hr), hy = sh.y + uy * (6 + hr);
   for (let pass = 0; pass < 2; pass++) {
     g.strokeStyle = g.fillStyle = pass ? f.color : INK;
     g.lineWidth = lw * 0.9 + m * 0.6 + (pass ? 0 : 3.4);
     g.beginPath(); g.moveTo(sh.x, sh.y); g.lineTo(nk.x, nk.y); g.stroke();
-    g.beginPath(); g.arc(hx, hy, HR + (pass ? 0 : 1.8), 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(hx, hy, hr + (pass ? 0 : 1.8), 0, Math.PI * 2); g.fill();
   }
   const dazed = ['hit', 'fall', 'down', 'ko'].includes(f.state);
+  if (photo) {
+    // fotoğraflı kafa: gövdeyle birlikte eğilir, darbede kızarır, yerdeyken başında yıldızlar döner
+    g.save(); g.translate(hx, hy); g.rotate(Math.atan2(fy, fx * s) * s * 0.7);
+    g.beginPath(); g.arc(0, 0, hr, 0, Math.PI * 2); g.clip();
+    g.drawImage(photo, -hr, -hr, hr * 2, hr * 2);
+    if (f.state === 'hit' || f.state === 'fall') { g.fillStyle = 'rgba(255,46,77,.35)'; g.fillRect(-hr, -hr, hr * 2, hr * 2); }
+    g.restore();
+    g.strokeStyle = INK; g.lineWidth = 2.6; g.beginPath(); g.arc(hx, hy, hr, 0, Math.PI * 2); g.stroke();
+    if (f.isPlayer) {
+      const a0 = Math.atan2(uy, ux);
+      g.strokeStyle = INK; g.lineWidth = 6.5; g.beginPath(); g.arc(hx, hy, hr - 1, a0 - 0.95, a0 + 0.95); g.stroke();
+      g.strokeStyle = GOLD; g.lineWidth = 3.5; g.beginPath(); g.arc(hx, hy, hr - 1, a0 - 0.95, a0 + 0.95); g.stroke();
+      const back = { x: hx + (ux * Math.cos(-0.95 * s) - uy * Math.sin(-0.95 * s)) * (hr - 1), y: hy + (ux * Math.sin(-0.95 * s) + uy * Math.cos(-0.95 * s)) * (hr - 1) };
+      for (let i = 0; i < 2; i++) {
+        const w = Math.sin(game.time * 9 + i * 1.7) * 4, len = 16 + i * 4;
+        g.beginPath(); g.moveTo(back.x, back.y);
+        g.quadraticCurveTo(back.x - fx * len * 0.5, back.y - fy * len * 0.5 + w + 2, back.x - fx * len, back.y - fy * len + 5 + i * 3 + w);
+        g.stroke();
+      }
+    }
+    if (['down', 'ko'].includes(f.state)) {
+      g.fillStyle = GOLD;
+      for (let i = 0; i < 3; i++) {
+        const a = game.time * 4 + i * 2.1, sx = hx + Math.cos(a) * (hr + 6), sy = hy - hr * 0.4 + Math.sin(a) * 5;
+        g.beginPath(); for (let k = 0; k < 10; k++) { const rr = k % 2 ? 1.6 : 4, aa = k * Math.PI / 5; g.lineTo(sx + Math.cos(aa) * rr, sy + Math.sin(aa) * rr); } g.fill();
+      }
+    }
+    return;
+  }
   const ex = hx + fx * 5.5 - ux * 1.5, ey = hy + fy * 5.5 - uy * 1.5;
   g.fillStyle = g.strokeStyle = INK;
   if (dazed) {
@@ -588,6 +638,9 @@ function setupLevel(demo) {
   const L = game.level, pal = ENEMIES[(L - 1) % ENEMIES.length];
   player = new Fighter({ isPlayer: true, x: 270, facing: 1, color: BONE, dark: '#c9bfae', name: 'SEN', muscle: Math.min(8, L - 1) });
   enemy = new Fighter({ x: 530, facing: -1, color: pal.c, dark: pal.d, name: pal.n + (ROMAN[Math.floor((L - 1) / ENEMIES.length) + 1] || ''), muscle: Math.min(8, L) });
+  const pool = FACES.filter(f => f !== pickedFace);
+  player.face = pickedFace;
+  enemy.face = pool.length ? pool[(L - 1) % pool.length] : null;
   game.ai = {
     timer: 0.8, react: Math.max(0.16, 0.5 - L * 0.045), aggr: Math.min(0.75, 0.38 + L * 0.05),
     blockChance: Math.min(0.6, 0.1 + L * 0.06), special: Math.min(0.55, (L - 1) * 0.09), dmg: Math.min(1.3, 0.8 + L * 0.05), blockT: 0, reacted: false,
@@ -919,23 +972,31 @@ function hpBar(g, x, y, w, h, f, rev) {
 }
 function drawHUD(g) {
   const L = game.level;
-  hpBar(g, 24, 18, 320, 18, player, false); hpBar(g, 456, 18, 320, 18, enemy, true);
+  hpBar(g, 58, 18, 290, 18, player, false); hpBar(g, 452, 18, 290, 18, enemy, true);
+  const portrait = (x, f) => {
+    g.fillStyle = INK; g.beginPath(); g.arc(x, 30, 25, 0, Math.PI * 2); g.fill();
+    g.save(); g.beginPath(); g.arc(x, 30, 22, 0, Math.PI * 2); g.clip();
+    const im = f.face && f.face.img.complete && f.face.img.naturalWidth ? f.face.img : null;
+    if (im) g.drawImage(im, x - 22, 8, 44, 44); else { g.fillStyle = f.color; g.fillRect(x - 22, 8, 44, 44); }
+    g.restore(); g.strokeStyle = f.isPlayer ? GOLD : f.color; g.lineWidth = 2.5; g.beginPath(); g.arc(x, 30, 22, 0, Math.PI * 2); g.stroke();
+  };
+  portrait(28, player); portrait(772, enemy);
   g.fillStyle = INK; g.beginPath(); g.roundRect(370, 8, 60, 50, 9); g.fill();
   g.strokeStyle = GOLD; g.lineWidth = 2; g.stroke();
   outlined(g, String(Math.ceil(game.roundT)), 400, 47, 36, game.roundT < 10 ? DANGER : GOLD);
   outlined(g, 'SEVİYE ' + L, 400, 78, 17, BONE);
-  outlined(g, player.name, 24, 60, 20, BONE, 'left');
-  outlined(g, enemy.name, 776, 60, 20, enemy.color, 'right');
+  outlined(g, player.name, 60, 60, 20, BONE, 'left');
+  outlined(g, enemy.name, 740, 60, 20, enemy.color, 'right');
   const pips = (x0, f, dir) => {
     for (let i = 0; i < 8; i++) {
       const x = x0 + dir * i * 11; g.beginPath(); g.arc(x, 72, 4, 0, Math.PI * 2);
       g.fillStyle = i < f.muscle ? (f.isPlayer ? GOLD : f.color) : 'rgba(244,236,220,.18)'; g.fill();
     }
   };
-  g.font = `700 13px ${BODY}`; g.fillStyle = 'rgba(244,236,220,.7)'; g.textAlign = 'left'; g.fillText('KAS', 24, 77);
-  pips(56, player, 1);
-  g.textAlign = 'right'; g.fillText('KAS', 776, 77); pips(744, enemy, -1);
-  outlined(g, 'PUAN ' + fmt(game.score), 24, 102, 22, GOLD, 'left');
+  g.font = `700 13px ${BODY}`; g.fillStyle = 'rgba(244,236,220,.7)'; g.textAlign = 'left'; g.fillText('KAS', 60, 77);
+  pips(92, player, 1);
+  g.textAlign = 'right'; g.fillText('KAS', 740, 77); pips(708, enemy, -1);
+  outlined(g, 'PUAN ' + fmt(game.score), 12, 104, 22, GOLD, 'left');
   if (player.hp < 25 && game.state === 'fight' && !player.knocked) dangerIcon(g, 360, 27, 0.55 + pulse() * 0.12);
   if (game.combo >= 2) {
     const s = 1 + game.comboPop * 0.4;
@@ -1031,7 +1092,7 @@ function drawFlex() {
   g.setTransform(2, 0, 0, 2, 0, 0);
   const pump = Math.sin(game.time * 4) * 6;
   Object.assign(flexFighter.pose, POSES.flex, { fa2: 178 - pump, ba2: -178 + pump });
-  flexFighter.state = 'win';
+  flexFighter.state = 'win'; flexFighter.face = pickedFace;
   drawFighter(g, flexFighter);
 }
 
@@ -1054,6 +1115,27 @@ function refreshMenu() {
   $('bestTxt').textContent = game.best ? 'En yüksek puan: ' + fmt(game.best) : '';
 }
 $('comboList2').innerHTML = $('comboList').innerHTML;
+function buildPicker() {
+  if (!FACES.length) return;
+  const saved = store('copAdamArena.face');
+  pickedFace = saved === 'none' ? null : faceById(saved) || FACES[0];
+  const box = $('faces'); box.innerHTML = '';
+  const opts = [...FACES, null];
+  for (const f of opts) {
+    const b = document.createElement('button');
+    b.className = 'face'; b.type = 'button';
+    b.setAttribute('aria-label', f ? 'Bu yüzle dövüş' : 'Yüzsüz çöp adam');
+    if (f) { const im = document.createElement('img'); im.src = f.img.src; im.alt = ''; b.appendChild(im); } else b.textContent = 'ÇÖP';
+    b.setAttribute('aria-pressed', String(f === pickedFace));
+    b.onclick = () => {
+      pickedFace = f; store('copAdamArena.face', f ? f.id : 'none');
+      box.querySelectorAll('.face').forEach(x => x.setAttribute('aria-pressed', 'false')); b.setAttribute('aria-pressed', 'true');
+      setupLevel(true);
+    };
+    box.appendChild(b);
+  }
+  $('pick').hidden = false;
+}
 $('startBtn').onclick = () => { store('copAdamArena.save', { level: 1, score: 0 }); startRun(1, 0); };
 $('contBtn').onclick = () => { const s = store('copAdamArena.save') || { level: 1, score: 0 }; startRun(s.level, s.score); };
 $('pauseBtn').onclick = () => togglePause(true);
@@ -1068,7 +1150,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && (ga
 function boot(data) {
   game.best = store('copAdamArena.best') || 0;
   if (data && data.level) store('copAdamArena.save', { level: data.level, score: data.score || 0 });
-  resize(); toMenu();
+  buildPicker(); resize(); toMenu();
   requestAnimationFrame(t => { last = t / 1000; requestAnimationFrame(frame); });
 }
 window.claude?.hot?.snapshot?.(() => ({ level: game.level, score: game.state === 'result' || game.state === 'menu' ? game.score : game.levelStart }));
