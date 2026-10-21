@@ -74,3 +74,32 @@ iPhone'da Safari ile açılır, kurulum gerekmez (Paylaş → "Ana Ekrana Ekle" 
 - Bilgisayarda klavye: ← → , J/Z yumruk, K/X tekme, Esc duraklat
 
 Ses gelmiyorsa iPhone'un sessiz düğmesini kapatın.
+
+---
+
+## 💳 Ödeme Takip (iPhone, sesli kayıt + yapay zekâ)
+
+[`odeme_takip/index.html`](odeme_takip/index.html): banka ödemeleri, kredi taksitleri, kredi kartı, fatura,
+kira ve bireysel ödemeleri aylık takip eden iPhone uyumlu uygulama.
+
+- **Sesli kayıt:** ortadaki 🎙️ düğmesine dokunup cümleyle anlatın:
+  *"Garanti'den çektiğim krediye her ayın 15'inde 4.250 lira, 24 taksit"*,
+  *"Ahmet'e 3 Kasım'da iki bin lira vereceğim"*, *"Elektrik faturasını ödedim"*.
+- **Yapay zekâ ile anlamlandırma:** cümle birebir değil, anlamına göre Claude tarafından ödeme kaydına
+  çevrilir (tür, tutar, banka/kişi, vade günü, taksit sayısı, tek seferlik tarih). Sonuç kaydetmeden önce
+  düzenlenebilir bir formda gösterilir. "…ödedim" gibi cümleler ilgili kaydı bu ay *ödendi* yapar.
+  Ayarlar'a Anthropic API anahtarı girilmezse uygulama basit Türkçe kurallarla yorumlar.
+- **Aylık görünüm:** toplam / ödenen / kalan, taksit numarası (ör. 3/24), tek dokunuşla "ödendi".
+- **Uyarılar:** açılışta gecikmiş ve yaklaşan ödemeler en üstte; uygulama simgesinde rozet;
+  **"Tümünü iPhone Takvimine ekle"** ile her ödeme vadesinden X gün önce ve vade günü 09:00'da
+  iPhone'un kendi alarmıyla hatırlatılır (uygulama kapalıyken de çalışır).
+- **Kısayol:** Ayarlar → *iPhone kısayolu* bölümündeki adımlarla "Hey Siri, Ödeme Kaydet" dediğinizde
+  cümleniz doğrudan uygulamaya gider. Arkaya dokunma ve Eylem düğmesine de atanabilir.
+  Uygulama adresine `?metin=...` (dikte edilen cümle) veya `?ses=1` (sesli kaydı aç) eklenebilir.
+- **Yedek:** kayıtlar yalnızca telefonda saklanır; düzenli olarak "Yedek al" ile iCloud Drive'a kaydedin.
+
+### iPhone'a kurulum
+Ses tanıma ve Kestirmeler için uygulamanın bir web adresinden açılması gerekir. En kolayı GitHub Pages:
+GitHub'da depo → **Settings → Pages → Build and deployment → Branch** olarak bu dalı ve `/ (root)`
+seçin. Birkaç dakika sonra adres `https://<kullanıcı-adı>.github.io/<depo>/odeme_takip/` olur.
+Bu adresi iPhone'da Safari ile açın, Ayarlar sekmesindeki kısayol adımlarını uygulayın.
