@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ödeme Takip</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Ödemeler">
+<meta name="theme-color" content="#0f766e">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+  /* iOS benzeri sade görünüm: üstte ay özeti, ortada liste, altta sekme çubuğu ve büyük mikrofon düğmesi. */
+  :root {
+    --bg: #f2f2f7; --card: #ffffff; --ink: #1c1c1e; --muted: #6b6b70; --line: #e3e3e8;
+    --accent: #0f766e; --accent-soft: #ccfbf1; --danger: #dc2626; --danger-soft: #fee2e2;
+    --warn: #b45309; --warn-soft: #fef3c7; --ok: #15803d; --ok-soft: #dcfce7;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000; --card: #1c1c1e; --ink: #f2f2f7; --muted: #9a9aa0; --line: #2c2c2e;
+      --accent: #2dd4bf; --accent-soft: #134e4a; --danger: #f87171; --danger-soft: #450a0a;
+      --warn: #fbbf24; --warn-soft: #451a03; --ok: #4ade80; --ok-soft: #052e16;
+    }
+  }
+  [hidden] { display: none !important; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    padding: env(safe-area-inset-top) 0 calc(84px + env(safe-area-inset-bottom));
+  }
+  header { padding: 14px 16px 6px; }
+  h1 { font-size: 30px; margin: 0; letter-spacing: -0.5px; }
+  h2 { font-size: 13px; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 22px 16px 6px; letter-spacing: .3px; }
+  main { max-width: 640px; margin: 0 auto; }
+  .card { background: var(--card); border-radius: 14px; margin: 0 16px; overflow: hidden; }
+  .pad { padding: 14px 16px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  button, .btn {
+    font: inherit; border: 0; border-radius: 11px; padding: 11px 16px; cursor: pointer;
+    background: var(--accent); color: #fff; font-weight: 600;
+  }
+  .btn-soft { background: var(--accent-soft); color: var(--accent); }
+  .btn-plain { background: transparent; color: var(--accent); padding: 8px 6px; }
+  .btn-danger { background: var(--danger-soft); color: var(--danger); }
+  .row-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row-btns > * { flex: 1 1 auto; }
+
+  /* Ay özeti */
+  .month-nav { display: flex; align-items: center; justify-content: space-between; margin: 4px 16px 10px; }
+  .month-nav strong { font-size: 18px; }
+  .month-nav button { background: var(--card); color: var(--accent); padding: 8px 14px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 16px; }
+  .stat { background: var(--card); border-radius: 12px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat span { font-size: 12px; color: var(--muted); }
+
+  .alert { margin: 12px 16px 0; padding: 12px 14px; border-radius: 12px; font-size: 15px; }
+  .alert.danger { background: var(--danger-soft); color: var(--danger); }
+  .alert.warn { background: var(--warn-soft); color: var(--warn); }
+
+  /* Ödeme satırları */
+  .item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-top: 1px solid var(--line); }
+  .item:first-child { border-top: 0; }
+  .ico { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; font-size: 19px; flex: none; background: var(--bg); }
+  .item .body { flex: 1; min-width: 0; }
+  .item .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .meta { font-size: 13px; color: var(--muted); }
+  .item .amt { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 6px; margin-top: 3px; }
+  .tag.paid { background: var(--ok-soft); color: var(--ok); }
+  .tag.late { background: var(--danger-soft); color: var(--danger); }
+  .tag.soon { background: var(--warn-soft); color: var(--warn); }
+  .tag.wait { background: var(--bg); color: var(--muted); }
+  .check {
+    width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); background: transparent;
+    padding: 0; flex: none; color: #fff; font-size: 16px; line-height: 1;
+  }
+  .check.on { background: var(--ok); border-color: var(--ok); }
+  .empty { padding: 26px 16px; text-align: center; color: var(--muted); }
+
+  /* Sekme çubuğu + mikrofon */
+  nav.tabs {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+    display: flex; justify-content: space-around; align-items: flex-end;
+    background: color-mix(in srgb, var(--card) 88%, transparent);
+    -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+    border-top: 1px solid var(--line);
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  }
+  nav.tabs button { background: none; color: var(--muted); font-size: 11px; font-weight: 600; padding: 4px 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  nav.tabs button .i { font-size: 22px; }
+  nav.tabs button.active { color: var(--accent); }
+  nav.tabs .mic {
+    width: 62px; height: 62px; border-radius: 50%; margin-top: -26px; padding: 0;
+    background: var(--accent); color: #fff; font-size: 28px; box-shadow: 0 6px 18px rgba(15,118,110,.35);
+  }
+
+  /* Alt sayfa (sesli giriş, form) */
+  .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 10; display: flex; align-items: flex-end; justify-content: center; }
+  .sheet {
+    background: var(--bg); width: 100%; max-width: 640px; max-height: 92vh; overflow-y: auto;
+    border-radius: 18px 18px 0 0; padding: 8px 0 calc(20px + env(safe-area-inset-bottom));
+    -webkit-overflow-scrolling: touch;
+  }
+  .sheet-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px 4px 16px; }
+  .sheet-head strong { font-size: 17px; }
+  textarea, input, select {
+    font: inherit; color: var(--ink); background: var(--card); width: 100%;
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  }
+  textarea { min-height: 96px; resize: vertical; }
+  .voice-btn {
+    display: block; margin: 16px auto 8px; width: 104px; height: 104px; border-radius: 50%;
+    font-size: 44px; padding: 0; background: var(--accent);
+  }
+  .voice-btn.rec { background: var(--danger); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,.45); } 50% { box-shadow: 0 0 0 18px rgba(220,38,38,0); } }
+  .field { padding: 10px 16px; border-top: 1px solid var(--line); }
+  .field:first-child { border-top: 0; }
+  .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ai-note { margin: 10px 16px 0; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 14px; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -3px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  ol.steps { margin: 6px 0 0; padding-left: 20px; }
+  ol.steps li { margin: 6px 0; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 5px; font-size: 13px; word-break: break-all; }
+  .seg { display: flex; background: var(--line); border-radius: 9px; padding: 2px; margin: 0 16px 10px; }
+  .seg button { flex: 1; background: transparent; color: var(--ink); font-size: 14px; padding: 7px 4px; border-radius: 7px; font-weight: 500; }
+  .seg button.active { background: var(--card); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .toast {
+    position: fixed; left: 50%; bottom: calc(100px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 12px; z-index: 20;
+    font-size: 15px; max-width: calc(100% - 32px); text-align: center;
+  }
+</style>
+</head>
+<body>
+<main>
+  <!-- AY GÖRÜNÜMÜ -->
+  <section id="view-month">
+    <header><h1>Bu Ay</h1></header>
+    <div class="month-nav">
+      <button id="prevMonth" aria-label="Önceki ay">‹</button>
+      <strong id="monthLabel"></strong>
+      <button id="nextMonth" aria-label="Sonraki ay">›</button>
+    </div>
+    <div class="stats">
+      <div class="stat"><span>Toplam</span><b id="sTotal"></b></div>
+      <div class="stat"><span>Ödenen</span><b id="sPaid"></b></div>
+      <div class="stat"><span>Kalan</span><b id="sLeft"></b></div>
+    </div>
+    <div id="alerts"></div>
+    <h2>Ödemeler</h2>
+    <div class="card" id="monthList"></div>
+  </section>
+
+  <!-- TÜM KAYITLAR -->
+  <section id="view-all" hidden>
+    <header><h1>Kayıtlar</h1></header>
+    <div class="seg" id="catFilter"></div>
+    <div class="card" id="allList"></div>
+    <div class="pad"><button class="btn-soft" style="width:100%" id="addManual">+ Elle ödeme ekle</button></div>
+  </section>
+
+  <!-- AYARLAR -->
+  <section id="view-settings" hidden>
+    <header><h1>Ayarlar</h1></header>
+
+    <h2>Yapay zekâ (sesli kaydı anlamlandırma)</h2>
+    <div class="card">
+      <div class="field">
+        <label for="apiKey">Anthropic API anahtarı</label>
+        <input id="apiKey" type="password" autocomplete="off" placeholder="sk-ant-...">
+      </div>
+      <div class="field">
+        <label for="model">Model</label>
+        <input id="model" autocomplete="off">
+      </div>
+      <div class="pad small muted">
+        Söylediğiniz cümle Claude'a gönderilir, ödeme bilgisine dönüştürülür ve kaydetmeden önce size gösterilir.
+        Anahtar yalnızca bu telefonda saklanır. Anahtar yoksa uygulama cümleyi kendi basit kurallarıyla anlamaya çalışır.
+        Anahtar almak için: <code>console.anthropic.com</code> → API Keys.
+      </div>
+    </div>
+
+    <h2>Hatırlatmalar</h2>
+    <div class="card">
+      <div class="field">
+        <label for="remindDays">Varsayılan: kaç gün önce uyarılsın?</label>
+        <select id="remindDays">
+          <option value="1">1 gün önce</option><option value="2">2 gün önce</option>
+          <option value="3">3 gün önce</option><option value="5">5 gün önce</option><option value="7">7 gün önce</option>
+        </select>
+      </div>
+      <div class="pad">
+        <div class="row-btns">
+          <button id="icsAll">📅 Tümünü iPhone Takvimine ekle</button>
+          <button class="btn-soft" id="askNotif">🔔 Bildirim izni</button>
+        </div>
+        <p class="small muted" style="margin:10px 0 0">
+          En güvenilir uyarı yöntemi takvime eklemektir: her ödeme, vadesinden önce ve vade günü saat 09:00'da
+          iPhone'un kendi alarmıyla hatırlatılır (uygulama kapalıyken bile). Uygulama açıldığında ayrıca
+          geciken ve yaklaşan ödemeler en üstte uyarı olarak gösterilir.
+        </p>
+      </div>
+    </div>
+
+    <h2>iPhone kısayolu</h2>
+    <div class="card pad" id="shortcutHelp"></div>
+
+    <h2>Yedek</h2>
+    <div class="card pad">
+      <div class="row-btns">
+        <button class="btn-soft" id="backup">⬇︎ Yedek al</button>
+        <button class="btn-soft" id="restoreBtn">⬆︎ Yedekten yükle</button>
+      </div>
+      <input type="file" id="restoreFile" accept="application/json,.json" hidden>
+      <p class="small muted" style="margin:10px 0 0">
+        Kayıtlar yalnızca bu telefonun tarayıcısında saklanır. Yedek dosyasını "Dosyalar → iCloud Drive"a kaydedin.
+      </p>
+    </div>
+    <div style="height:20px"></div>
+  </section>
+</main>
+
+<nav class="tabs">
+  <button data-view="month" class="active"><span class="i">🗓️</span>Bu Ay</button>
+  <button class="mic" id="micTab" aria-label="Sesli kayıt">🎙️</button>
+  <button data-view="all"><span class="i">📋</span>Kayıtlar</button>
+  <button data-view="settings"><span class="i">⚙️</span>Ayarlar</button>
+</nav>
+
+<!-- SESLİ GİRİŞ -->
+<div class="sheet-bg" id="voiceSheet" hidden>
+  <div class="sheet">
+    <div class="sheet-head"><strong>Sesli kayıt</strong><button class="btn-plain" data-close>Kapat</button></div>
+    <button class="voice-btn" id="voiceBtn" aria-label="Konuş">🎙️</button>
+    <p class="small muted" style="text-align:center;margin:0 16px 12px" id="voiceHint">
+      Dokunun ve konuşun. Örnek: "Garanti'den çektiğim krediye her ayın 15'inde 4.250 lira, 24 taksit"
+      ya da "Ahmet'e 3 Kasım'da 2 bin lira vereceğim" ya da "Elektrik faturasını ödedim".
+    </p>
+    <div class="pad" style="padding-top:0">
+      <textarea id="voiceText" placeholder="Söyledikleriniz burada görünür. Klavyedeki mikrofonla da dikte edebilir veya yazabilirsiniz."></textarea>
+      <div class="row-btns" style="margin-top:10px">
+        <button id="interpret">✨ Anlamlandır</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ÖDEME FORMU (yapay zekâ sonucu ya da elle düzenleme) -->
+<div class="sheet-bg" id="formSheet" hidden>
+  <div class="sheet">
+    <div class="sheet-head"><strong id="formTitle">Ödeme</strong><button class="btn-plain" data-close>Vazgeç</button></div>
+    <div id="aiNote" class="ai-note" hidden></div>
+    <h2>Bilgiler</h2>
+    <div class="card">
+      <div class="field"><label for="fTitle">Ödeme adı</label><input id="fTitle" placeholder="Örn. Garanti ihtiyaç kredisi"></div>
+      <div class="field grid2">
+        <div><label for="fCat">Tür</label><select id="fCat"></select></div>
+        <div><label for="fAmount">Tutar (₺)</label><input id="fAmount" inputmode="decimal" placeholder="0"></div>
+      </div>
+      <div class="field"><label for="fParty">Banka / kişi / kurum</label><input id="fParty" placeholder="Örn. Garanti BBVA, Ahmet"></div>
+    </div>
+    <h2>Zamanlama</h2>
+    <div class="card">
+      <div class="field">
+        <label for="fRec">Tekrar</label>
+        <select id="fRec"><option value="monthly">Her ay</option><option value="once">Tek seferlik</option></select>
+      </div>
+      <div class="field grid2" id="monthlyFields">
+        <div><label for="fDay">Ayın kaçında?</label><input id="fDay" type="number" min="1" max="31" inputmode="numeric"></div>
+        <div><label for="fStart">Başlangıç ayı</label><input id="fStart" type="month"></div>
+      </div>
+      <div class="field grid2" id="installFields">
+        <div><label for="fInst">Taksit sayısı (boş = süresiz)</label><input id="fInst" type="number" min="1" inputmode="numeric"></div>
+        <div><label for="fRemind">Kaç gün önce uyar</label><input id="fRemind" type="number" min="0" max="30" inputmode="numeric"></div>
+      </div>
+      <div class="field" id="onceFields"><label for="fDate">Tarih</label><input id="fDate" type="date"></div>
+    </div>
+    <h2>Not</h2>
+    <div class="card"><div class="field"><textarea id="fNotes" style="min-height:60px"></textarea></div></div>
+    <div class="pad row-btns" style="margin-top:8px">
+      <button id="saveForm">Kaydet</button>
+    </div>
+    <div class="pad row-btns" style="padding-top:0" id="formExtra">
+      <button class="btn-soft" id="icsOne">📅 Takvime ekle</button>
+      <button class="btn-danger" id="deleteForm">Sil</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+'use strict';
+/* =========================================================
+   Veri modeli (localStorage):
+   payment = { id, title, category, amount, party, recurrence: 'monthly'|'once',
+               dueDay, startYm: 'YYYY-MM', installments (null = süresiz),
+               dueDate: 'YYYY-MM-DD', remindDays, notes, paid: { 'YYYY-MM': 'YYYY-MM-DD' } }
+   ========================================================= */
+const STORE = 'odemeTakip.v1';
+const CATS = {
+  kredi:    { label: 'Kredi taksiti', ico: '🏦' },
+  kart:     { label: 'Kredi kartı',   ico: '💳' },
+  banka:    { label: 'Banka ödemesi', ico: '🏛️' },
+  fatura:   { label: 'Fatura',        ico: '💡' },
+  kira:     { label: 'Kira / aidat',  ico: '🏠' },
+  bireysel: { label: 'Bireysel',      ico: '👤' },
+  abonelik: { label: 'Abonelik',      ico: '🔁' },
+  vergi:    { label: 'Vergi / SGK',   ico: '🧾' },
+  diger:    { label: 'Diğer',         ico: '📌' },
+};
+const DEFAULT_MODEL = 'claude-opus-5-5';
+
+let db = load();
+let viewYm; // bind() öncesi ayarlanır (tarih yardımcıları aşağıda tanımlı)
+let catFilter = 'all';
+let editingId = null;
+let pendingAction = null; // yapay zekâdan gelen "ödendi işaretle" önerisi
+
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem(STORE));
+    if (d && Array.isArray(d.payments)) return Object.assign({ settings: {} }, d);
+  } catch (e) {}
+  return { payments: [], settings: {} };
+}
+function save() {
+  try { localStorage.setItem(STORE, JSON.stringify(db)); } catch (e) { toast('Kaydedilemedi: depolama dolu olabilir'); }
+  updateBadge();
+}
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const settings = () => db.settings;
+
+/* ---------- Tarih yardımcıları ---------- */
+const pad2 = (n) => String(n).padStart(2, '0');
+function ymOf(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1); }
+function isoOf(d) { return ymOf(d) + '-' + pad2(d.getDate()); }
+function ymAdd(ym, n) { const [y, m] = ym.split('-').map(Number); return ymOf(new Date(y, m - 1 + n, 1)); }
+function ymDiff(a, b) { const [ay, am] = a.split('-').map(Number), [by, bm] = b.split('-').map(Number); return (by - ay) * 12 + (bm - am); }
+function daysIn(ym) { const [y, m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate(); }
+function today() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
+function parseIso(s) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }
+const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+function ymLabel(ym) { const [y, m] = ym.split('-').map(Number); return MONTHS[m - 1] + ' ' + y; }
+function dayLabel(iso) { const d = parseIso(iso); return d.getDate() + ' ' + MONTHS[d.getMonth()]; }
+const money = (n) => (n == null || isNaN(n)) ? '—' : Number(n).toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + ' ₺';
+
+/* Bir ödemenin verilen aydaki vadesi (yoksa null). */
+function occurrence(p, ym) {
+  if (p.recurrence === 'once') {
+    if (!p.dueDate || p.dueDate.slice(0, 7) !== ym) return null;
+    return { p, ym, date: p.dueDate, no: null };
+  }
+  const start = p.startYm || ym;
+  const diff = ymDiff(start, ym);
+  if (diff < 0) return null;
+  if (p.installments && diff >= p.installments) return null;
+  const day = Math.min(p.dueDay || 1, daysIn(ym));
+  return { p, ym, date: ym + '-' + pad2(day), no: p.installments ? diff + 1 : null };
+}
+function statusOf(o) {
+  if (o.p.paid && o.p.paid[o.ym]) return 'paid';
+  const days = Math.round((parseIso(o.date) - today()) / 86400000);
+  if (days < 0) return 'late';
+  if (days <= (o.p.remindDays ?? defaultRemind())) return 'soon';
+  return 'wait';
+}
+function daysLeft(o) { return Math.round((parseIso(o.date) - today()) / 86400000); }
+function defaultRemind() { return Number(settings().remindDays || 3); }
+
+/* Bugüne göre geciken (son 12 ay) ve yaklaşan ödemeler. */
+function dueAlerts() {
+  const late = [], soon = [];
+  const nowYm = ymOf(new Date());
+  for (let k = -12; k <= 1; k++) {
+    const ym = ymAdd(nowYm, k);
+    for (const p of db.payments) {
+      const o = occurrence(p, ym);
+      if (!o) continue;
+      const s = statusOf(o);
+      if (s === 'late') late.push(o);
+      else if (s === 'soon') soon.push(o);
+    }
+  }
+  return { late, soon };
+}
+
+/* ---------- Ekranlar ---------- */
+function render() {
+  renderMonth();
+  renderAll();
+}
+
+function renderMonth() {
+  $('monthLabel').textContent = ymLabel(viewYm);
+  const occ = db.payments.map((p) => occurrence(p, viewYm)).filter(Boolean)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  let total = 0, paid = 0;
+  for (const o of occ) { const a = Number(o.p.amount) || 0; total += a; if (statusOf(o) === 'paid') paid += a; }
+  $('sTotal').textContent = money(total);
+  $('sPaid').textContent = money(paid);
+  $('sLeft').textContent = money(total - paid);
+
+  const { late, soon } = dueAlerts();
+  let alerts = '';
+  if (late.length) alerts += `<div class="alert danger">⚠️ <b>${late.length} gecikmiş ödeme:</b> ${late.slice(0, 4).map((o) => esc(o.p.title) + ' (' + dayLabel(o.date) + ')').join(', ')}${late.length > 4 ? '…' : ''}</div>`;
+  if (soon.length) alerts += `<div class="alert warn">⏰ <b>Yaklaşan:</b> ${soon.slice(0, 4).map((o) => esc(o.p.title) + ' – ' + whenText(o)).join(', ')}${soon.length > 4 ? '…' : ''}</div>`;
+  $('alerts').innerHTML = alerts;
+
+  $('monthList').innerHTML = occ.length ? occ.map(rowHtml).join('') :
+    '<div class="empty">Bu ay için ödeme yok.<br>Ortadaki 🎙️ düğmesiyle sesli ekleyin.</div>';
+}
+
+function whenText(o) {
+  const d = daysLeft(o);
+  if (d === 0) return 'bugün';
+  if (d === 1) return 'yarın';
+  if (d < 0) return (-d) + ' gün gecikti';
+  return d + ' gün kaldı';
+}
+
+function rowHtml(o) {
+  const s = statusOf(o), c = CATS[o.p.category] || CATS.diger;
+  const tagText = { paid: 'Ödendi ' + (o.p.paid[o.ym] ? dayLabel(o.p.paid[o.ym]) : ''), late: whenText(o), soon: whenText(o), wait: whenText(o) }[s];
+  const meta = [dayLabel(o.date), o.no ? `Taksit ${o.no}/${o.p.installments}` : null, o.p.party].filter(Boolean).map(esc).join(' · ');
+  return `<div class="item">
+    <button class="check ${s === 'paid' ? 'on' : ''}" data-toggle="${o.p.id}" data-ym="${o.ym}" aria-label="Ödendi">${s === 'paid' ? '✓' : ''}</button>
+    <div class="body" data-edit="${o.p.id}">
+      <div class="title">${esc(o.p.title)}</div>
+      <div class="meta">${meta}</div>
+      <span class="tag ${s}">${esc(tagText)}</span>
+    </div>
+    <div class="amt" data-edit="${o.p.id}">${c.ico}<br>${money(o.p.amount)}</div>
+  </div>`;
+}
+
+function renderAll() {
+  const used = ['all', ...Object.keys(CATS).filter((k) => db.payments.some((p) => p.category === k))];
+  if (!used.includes(catFilter)) catFilter = 'all';
+  $('catFilter').innerHTML = used.length > 1 ? used.map((k) =>
+    `<button data-cat="${k}" class="${k === catFilter ? 'active' : ''}">${k === 'all' ? 'Tümü' : CATS[k].ico}</button>`).join('') : '';
+  const list = db.payments.filter((p) => catFilter === 'all' || p.category === catFilter)
+    .sort((a, b) => a.title.localeCompare(b.title, 'tr'));
+  $('allList').innerHTML = list.length ? list.map((p) => {
+    const c = CATS[p.category] || CATS.diger;
+    let when;
+    if (p.recurrence === 'once') when = p.dueDate ? dayLabel(p.dueDate) + ' ' + p.dueDate.slice(0, 4) : 'Tarih yok';
+    else {
+      when = 'Her ayın ' + (p.dueDay || '?') + "'i";
+      if (p.installments) {
+        const left = p.installments - Object.keys(p.paid || {}).length;
+        when += ` · ${p.installments} taksit (${Math.max(left, 0)} kaldı) · son: ${ymLabel(ymAdd(p.startYm, p.installments - 1))}`;
+      }
+    }
+    return `<div class="item" data-edit="${p.id}">
+      <div class="ico">${c.ico}</div>
+      <div class="body"><div class="title">${esc(p.title)}</div><div class="meta">${esc(c.label)} · ${esc(when)}</div></div>
+      <div class="amt">${money(p.amount)}</div>
+    </div>`;
+  }).join('') : '<div class="empty">Henüz kayıt yok.</div>';
+}
+
+function showView(v) {
+  for (const s of ['month', 'all', 'settings']) $('view-' + s).hidden = s !== v;
+  document.querySelectorAll('nav.tabs [data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === v));
+  window.scrollTo(0, 0);
+}
+
+function togglePaid(id, ym) {
+  const p = db.payments.find((x) => x.id === id);
+  if (!p) return;
+  p.paid = p.paid || {};
+  if (p.paid[ym]) delete p.paid[ym]; else p.paid[ym] = isoOf(new Date());
+  save(); render();
+}
+
+/* ---------- Form ---------- */
+function openForm(data, note) {
+  editingId = data.id || null;
+  $('formTitle').textContent = editingId ? 'Ödemeyi düzenle' : 'Yeni ödeme';
+  $('aiNote').hidden = !note;
+  $('aiNote').textContent = note || '';
+  $('fTitle').value = data.title || '';
+  $('fCat').value = CATS[data.category] ? data.category : 'diger';
+  $('fAmount').value = data.amount ?? '';
+  $('fParty').value = data.party || '';
+  $('fRec').value = data.recurrence === 'once' ? 'once' : 'monthly';
+  $('fDay').value = data.dueDay || '';
+  $('fStart').value = data.startYm || ymOf(new Date());
+  $('fInst').value = data.installments || '';
+  $('fRemind').value = data.remindDays ?? defaultRemind();
+  $('fDate').value = data.dueDate || '';
+  $('fNotes').value = data.notes || '';
+  $('formExtra').hidden = !editingId;
+  syncRecFields();
+  openSheet('formSheet');
+}
+function syncRecFields() {
+  const once = $('fRec').value === 'once';
+  $('monthlyFields').hidden = once;
+  $('installFields').querySelector('div').hidden = once;
+  $('onceFields').hidden = !once;
+}
+function readForm() {
+  const num = (v) => { const n = parseFloat(String(v).replace(/\./g, '').replace(',', '.')); return isNaN(n) ? null : n; };
+  const rec = $('fRec').value;
+  const p = {
+    title: $('fTitle').value.trim() || 'Ödeme',
+    category: $('fCat').value,
+    amount: num($('fAmount').value),
+    party: $('fParty').value.trim(),
+    recurrence: rec,
+    remindDays: parseInt($('fRemind').value, 10),
+    notes: $('fNotes').value.trim(),
+  };
+  if (isNaN(p.remindDays)) p.remindDays = defaultRemind();
+  if (rec === 'monthly') {
+    p.dueDay = Math.min(Math.max(parseInt($('fDay').value, 10) || 1, 1), 31);
+    p.startYm = $('fStart').value || ymOf(new Date());
+    p.installments = parseInt($('fInst').value, 10) || null;
+    p.dueDate = null;
+  } else {
+    p.dueDate = $('fDate').value || isoOf(new Date());
+    p.dueDay = null; p.startYm = null; p.installments = null;
+  }
+  return p;
+}
+function saveForm() {
+  const data = readForm();
+  if (editingId) {
+    const p = db.payments.find((x) => x.id === editingId);
+    Object.assign(p, data);
+  } else {
+    db.payments.push(Object.assign({ id: uid(), paid: {}, created: new Date().toISOString() }, data));
+    const first = data.recurrence === 'once' ? data.dueDate.slice(0, 7) : data.startYm;
+    if (first) viewYm = first < ymOf(new Date()) ? ymOf(new Date()) : first;
+  }
+  save(); closeSheets(); render(); showView('month');
+  toast(editingId ? 'Güncellendi' : 'Kaydedildi ✓');
+}
+function deleteForm() {
+  if (!editingId || !confirm('Bu ödeme silinsin mi?')) return;
+  db.payments = db.payments.filter((x) => x.id !== editingId);
+  save(); closeSheets(); render();
+  toast('Silindi');
+}
+
+/* ---------- Alt sayfalar ---------- */
+function openSheet(id) { closeSheets(); $(id).hidden = false; $(id).querySelector('.sheet').scrollTop = 0; }
+function closeSheets() { stopListening(); document.querySelectorAll('.sheet-bg').forEach((s) => (s.hidden = true)); }
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), 2600);
+}
+
+/* ---------- Ses tanıma (Safari: webkitSpeechRecognition) ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, listening = false, baseText = '';
+function startListening() {
+  if (!SR) {
+    $('voiceHint').textContent = 'Bu tarayıcı doğrudan ses tanımayı desteklemiyor. Aşağıdaki kutuya dokunup klavyedeki 🎙️ tuşuyla dikte edin.';
+    $('voiceText').focus();
+    return;
+  }
+  if (listening) { stopListening(); return; }
+  rec = new SR();
+  rec.lang = 'tr-TR';
+  rec.interimResults = true;
+  rec.continuous = true;
+  baseText = $('voiceText').value.trim();
+  rec.onresult = (e) => {
+    let txt = '';
+    for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+    $('voiceText').value = (baseText ? baseText + ' ' : '') + txt.trim();
+  };
+  rec.onerror = (e) => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed')
+      $('voiceHint').textContent = 'Mikrofon izni verilmedi. Ayarlar → Safari → Mikrofon\'dan izin verin veya klavyedeki 🎙️ ile dikte edin.';
+    stopListening();
+  };
+  rec.onend = () => { if (listening) stopListening(true); };
+  try { rec.start(); } catch (e) { return; }
+  listening = true;
+  $('voiceBtn').classList.add('rec');
+  $('voiceBtn').textContent = '■';
+}
+function stopListening(autoInterpret) {
+  if (rec) { try { rec.stop(); } catch (e) {} rec = null; }
+  if (!listening) return;
+  listening = false;
+  $('voiceBtn').classList.remove('rec');
+  $('voiceBtn').textContent = '🎙️';
+  if (autoInterpret && $('voiceText').value.trim()) interpret();
+}
+
+/* ---------- Yapay zekâ ile anlamlandırma ---------- */
+const AI_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['action', 'title', 'category', 'amount', 'party', 'recurrence', 'due_day', 'start_month',
+    'installments', 'due_date', 'remind_days', 'notes', 'target_id', 'explanation'],
+  properties: {
+    action: { type: 'string', enum: ['add', 'mark_paid', 'unclear'] },
+    title: { type: 'string' },
+    category: { type: 'string', enum: Object.keys(CATS) },
+    amount: { type: ['number', 'null'] },
+    party: { type: 'string' },
+    recurrence: { type: 'string', enum: ['monthly', 'once'] },
+    due_day: { type: ['integer', 'null'] },
+    start_month: { type: ['string', 'null'] },
+    installments: { type: ['integer', 'null'] },
+    due_date: { type: ['string', 'null'] },
+    remind_days: { type: ['integer', 'null'] },
+    notes: { type: 'string' },
+    target_id: { type: ['string', 'null'] },
+    explanation: { type: 'string' },
+  },
+};
+
+function aiSystemPrompt() {
+  const now = new Date();
+  const list = db.payments.map((p) => `- id=${p.id} | ${p.title} | ${p.category} | ${p.amount ?? '?'} TL | ${p.party || ''}`).join('\n') || '(kayıt yok)';
+  return `Sen Türkçe konuşan bir kişisel finans asistanısın. Kullanıcı bir ödemeyi sesli olarak anlatıyor; metin ses tanımadan geldiği için yazım hataları, rakam yerine kelimeler ("iki bin beş yüz") ve eksik noktalama olabilir. Cümleyi kelimesi kelimesine değil, anlamına göre yorumla ve tek bir ödeme kaydına dönüştür.
+
+Bugünün tarihi: ${isoOf(now)} (${['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'][now.getDay()]}).
+
+Kurallar:
+- action: yeni bir ödeme/borç/taksit anlatılıyorsa "add"; kullanıcı mevcut bir ödemeyi ödediğini söylüyorsa ("ödedim", "yatırdım", "kapattım") "mark_paid" ve target_id'ye aşağıdaki listeden en uygun kaydın id'sini yaz; anlaşılmıyorsa "unclear".
+- category: kredi (banka kredisi, ihtiyaç/konut/taşıt kredisi taksiti), kart (kredi kartı ekstresi/asgari ödeme), banka (diğer banka ödemeleri: KMH, hesap işletim vb.), fatura (elektrik, su, doğalgaz, internet, telefon), kira (kira, aidat), bireysel (bir kişiye borç/ödeme), abonelik (Netflix, spor salonu vb.), vergi (vergi, SGK, Bağ-Kur, MTV), diger.
+- title: kısa ve anlaşılır bir ad üret (ör. "Garanti ihtiyaç kredisi", "Ahmet'e borç", "Elektrik faturası"). party: banka/kişi/kurum adı (bankaların doğru yazımını kullan: Garanti BBVA, Ziraat Bankası, İş Bankası, Yapı Kredi, Akbank, QNB, Halkbank, VakıfBank, DenizBank, Enpara vb.).
+- amount: Türk lirası cinsinden sayı ("4 bin 250" = 4250, "2,5 milyon" = 2500000). Bilinmiyorsa null.
+- Düzenli/aylık ödemeler (taksitler, faturalar, kira, kart) için recurrence "monthly", due_day ayın günü (1-31), start_month "YYYY-MM" (söylenmediyse: bu ayın vade günü henüz geçmediyse bu ay, geçtiyse gelecek ay), installments toplam taksit sayısı (süresizse null). Kullanıcı "kalan 10 taksit" derse installments=10 ve start_month bir sonraki vade ayı. due_date null.
+- Tek seferlik ödemelerde recurrence "once", due_date "YYYY-MM-DD" (göreli ifadeleri bugüne göre hesapla: "yarın", "haftaya cuma", "ay sonunda"), due_day/start_month/installments null.
+- remind_days: kullanıcı "3 gün önce hatırlat" gibi bir şey söylediyse o sayı, yoksa null.
+- notes: kayda yararlı ek ayrıntılar (faiz, hesap no vb.), yoksa boş.
+- explanation: kullanıcıya ne anladığını 1 cümleyle Türkçe özetle; emin olmadığın bir şeyi tahmin ettiysen belirt.
+- Kullanılmayan alanlar için string ise "" , diğerleri null ver.
+
+Kullanıcının mevcut kayıtları:
+${list}`;
+}
+
+async function interpretWithClaude(text) {
+  const key = (settings().apiKey || '').trim();
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-beta': 'server-side-fallback-2026-07-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: (settings().model || DEFAULT_MODEL).trim(),
+      max_tokens: 4000,
+      fallbacks: 'default',
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: AI_SCHEMA } },
+      system: aiSystemPrompt(),
+      messages: [{ role: 'user', content: text }],
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data.error && data.error.message) || ('HTTP ' + res.status));
+  if (data.stop_reason === 'refusal') throw new Error('İstek yapay zekâ tarafından reddedildi');
+  const block = (data.content || []).filter((b) => b.type === 'text').pop();
+  if (!block) throw new Error('Boş yanıt');
+  return JSON.parse(block.text);
+}
+
+/* Anahtar yoksa ya da bağlantı yoksa kullanılan basit Türkçe kural tabanlı yorumlayıcı. */
+const NUMW = { sıfır: 0, bir: 1, iki: 2, üç: 3, dört: 4, beş: 5, altı: 6, yedi: 7, sekiz: 8, dokuz: 9, on: 10, yirmi: 20, otuz: 30, kırk: 40, elli: 50, altmış: 60, yetmiş: 70, seksen: 80, doksan: 90 };
+function wordsToNumbers(t) {
+  // "iki bin beş yüz" → "2500"; rakamla karışık "4 bin 250" → "4250"
+  return t.replace(/(^|\s)((?:\d+(?:[.,]\d+)?|sıfır|bir|iki|üç|dört|beş|altı|yedi|sekiz|dokuz|on|yirmi|otuz|kırk|elli|altmış|yetmiş|seksen|doksan|yüz|bin|milyon)(?:\s+(?:\d+(?:[.,]\d+)?|bir|iki|üç|dört|beş|altı|yedi|sekiz|dokuz|on|yirmi|otuz|kırk|elli|altmış|yetmiş|seksen|doksan|yüz|bin|milyon))*)(?=[\s'’.,]|$)/gi, (whole, pre, m) => {
+    const parts = m.toLowerCase().split(/\s+/);
+    if (parts.length === 1 && /^\d/.test(parts[0])) return whole;
+    let total = 0, cur = 0, any = false;
+    for (const w of parts) {
+      if (/^\d/.test(w)) { cur += parseFloat(w.replace(/\./g, '').replace(',', '.')); any = true; }
+      else if (w in NUMW) { cur += NUMW[w]; any = true; }
+      else if (w === 'yüz') { cur = (cur || 1) * 100; any = true; }
+      else if (w === 'bin') { total += (cur || 1) * 1000; cur = 0; any = true; }
+      else if (w === 'milyon') { total += (cur || 1) * 1e6; cur = 0; any = true; }
+    }
+    return pre + (any ? String(total + cur) : m);
+  });
+}
+function interpretLocally(raw) {
+  const t0 = raw.toLocaleLowerCase('tr-TR');
+  const t = wordsToNumbers(t0);
+  const out = { action: 'add', title: '', category: 'diger', amount: null, party: '', recurrence: 'monthly', due_day: null,
+    start_month: null, installments: null, due_date: null, remind_days: null, notes: '', target_id: null, explanation: '' };
+
+  if (/(ödedim|yatırdım|kapattım|ödendi|verdim)\b/.test(t)) {
+    let best = null, bestScore = 0;
+    for (const p of db.payments) {
+      const words = (p.title + ' ' + (p.party || '')).toLocaleLowerCase('tr-TR').split(/[\s'’]+/).filter((w) => w.length > 2);
+      const score = words.filter((w) => t.includes(w.slice(0, Math.max(4, w.length - 2)))).length;
+      if (score > bestScore) { best = p; bestScore = score; }
+    }
+    if (best) return Object.assign(out, { action: 'mark_paid', target_id: best.id, explanation: `"${best.title}" bu ay ödendi olarak işaretlenecek.` });
+  }
+
+  const banks = [['garanti', 'Garanti BBVA'], ['ziraat', 'Ziraat Bankası'], ['iş bank', 'İş Bankası'], ['yapı kredi', 'Yapı Kredi'], ['akbank', 'Akbank'],
+    ['qnb', 'QNB'], ['finans', 'QNB'], ['halk', 'Halkbank'], ['vakıf', 'VakıfBank'], ['deniz', 'DenizBank'], ['enpara', 'Enpara'], ['ing', 'ING'],
+    ['teb', 'TEB'], ['kuveyt', 'Kuveyt Türk'], ['albaraka', 'Albaraka'], ['şekerbank', 'Şekerbank'], ['fibabanka', 'Fibabanka'], ['odea', 'Odeabank']];
+  for (const [k, name] of banks) if (new RegExp('(^|\\s)' + k).test(t)) { out.party = name; break; }
+
+  if (/kredi kart|kartın|kartı|ekstre|asgari/.test(t)) out.category = 'kart';
+  else if (/kredi|taksit/.test(t)) out.category = 'kredi';
+  else if (/elektrik|doğal ?gaz|su faturası|internet|telefon faturası|fatura/.test(t)) out.category = 'fatura';
+  else if (/kira|aidat/.test(t)) out.category = 'kira';
+  else if (/vergi|sgk|bağ-?kur|mtv/.test(t)) out.category = 'vergi';
+  else if (/netflix|spotify|youtube|abonelik|üyelik|spor salonu/.test(t)) out.category = 'abonelik';
+  else if (out.party) out.category = 'banka';
+
+  const person = raw.match(/([A-ZÇĞİÖŞÜ][a-zçğıöşü]+)(?:'|’)?(?:ye|ya|e|a|den|dan|ten|tan)\b/);
+  if (out.category === 'diger' && person && !out.party) { out.category = 'bireysel'; out.party = person[1]; }
+
+  const inst = t.match(/(\d+)\s*(?:taksit|ay boyunca|aylık vade)/);
+  if (inst) out.installments = parseInt(inst[1], 10);
+
+  const amt = t.match(/(\d+(?:[.,]\d+)?)\s*(?:tl|lira|₺|türk lirası)/) || t.match(/(\d{3,}(?:[.,]\d+)?)/);
+  if (amt) out.amount = parseFloat(amt[1].replace(/\.(?=\d{3})/g, '').replace(',', '.'));
+
+  const now = new Date();
+  const monthIdx = MONTHS.findIndex((m) => t.includes(m.toLocaleLowerCase('tr-TR')));
+  const dayM = t.match(/ayın\s*(\d{1,2})/) || t.match(/(\d{1,2})\s*['’]?\s*(?:si|sı|ü|u|i|ı|sinde|sında|inde|ında|ünde|unda)?\s*(?:günü|gününde)/) || t.match(/her ay\D{0,12}(\d{1,2})(?!\d)/);
+  const once = /(bir kere|tek sefer|sadece bir|yarın|bugün|haftaya)/.test(t) || (monthIdx >= 0 && !/her ay|taksit/.test(t)) || out.category === 'bireysel';
+
+  if (once && !inst) {
+    out.recurrence = 'once';
+    let d = new Date(now);
+    if (/yarın/.test(t)) d.setDate(d.getDate() + 1);
+    else if (/haftaya/.test(t)) d.setDate(d.getDate() + 7);
+    else if (monthIdx >= 0) {
+      const dm = t.match(new RegExp('(\\d{1,2})\\s*' + MONTHS[monthIdx].toLocaleLowerCase('tr-TR')));
+      d = new Date(now.getFullYear(), monthIdx, dm ? parseInt(dm[1], 10) : 1);
+      if (d < today()) d.setFullYear(d.getFullYear() + 1);
+    }
+    out.due_date = isoOf(d);
+  } else {
+    out.due_day = dayM ? Math.min(parseInt(dayM[1], 10), 31) : now.getDate();
+    out.start_month = out.due_day >= now.getDate() ? ymOf(now) : ymAdd(ymOf(now), 1);
+  }
+  const rem = t.match(/(\d+)\s*gün önce/);
+  if (rem) out.remind_days = parseInt(rem[1], 10);
+
+  const named = [['elektrik', 'Elektrik faturası'], ['doğal', 'Doğalgaz faturası'], ['dogal', 'Doğalgaz faturası'], ['su fatura', 'Su faturası'],
+    ['internet', 'İnternet faturası'], ['telefon', 'Telefon faturası'], ['aidat', 'Aidat'], ['kira', 'Kira'], ['netflix', 'Netflix'],
+    ['spotify', 'Spotify'], ['youtube', 'YouTube Premium'], ['spor salonu', 'Spor salonu'], ['sgk', 'SGK primi'], ['bağ', 'Bağ-Kur primi'], ['mtv', 'MTV'],
+    ['konut kredi', 'konut kredisi'], ['taşıt kredi', 'taşıt kredisi'], ['ihtiyaç kredi', 'ihtiyaç kredisi'], ['asgari', 'kredi kartı'], ['kart', 'kredi kartı']]
+    .find(([k]) => t.includes(k));
+  const catName = named ? named[1] : CATS[out.category].label.toLowerCase();
+  out.title = out.category === 'bireysel' ? out.party + ' ödemesi'
+    : (out.party ? out.party + ' ' : '') + (out.category === 'diger' ? raw.split(/\s+/).slice(0, 4).join(' ') : catName);
+  out.title = out.title.charAt(0).toLocaleUpperCase('tr-TR') + out.title.slice(1);
+  out.notes = raw;
+  out.explanation = 'Yapay zekâ anahtarı olmadan basit kurallarla yorumlandı; lütfen alanları kontrol edin.';
+  return out;
+}
+
+async function interpret() {
+  const text = $('voiceText').value.trim();
+  if (!text) { toast('Önce bir şey söyleyin ya da yazın'); return; }
+  stopListening();
+  const btn = $('interpret');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Anlamlandırılıyor…';
+  let r, note;
+  try {
+    if (settings().apiKey) r = await interpretWithClaude(text);
+    else r = interpretLocally(text);
+    note = r.explanation;
+  } catch (e) {
+    r = interpretLocally(text);
+    note = 'Yapay zekâya ulaşılamadı (' + e.message + '). Basit kurallarla yorumlandı; lütfen kontrol edin.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✨ Anlamlandır';
+  }
+  applyInterpretation(r, note, text);
+}
+
+function applyInterpretation(r, note, text) {
+  if (r.action === 'mark_paid' && r.target_id) {
+    const p = db.payments.find((x) => x.id === r.target_id);
+    if (p) {
+      const o = findOpenOccurrence(p);
+      if (!o) { closeSheets(); toast(`"${p.title}" için ödenmemiş taksit yok`); return; }
+      if (confirm(`${note || ''}\n\n"${p.title}" – ${ymLabel(o.ym)} ödendi olarak işaretlensin mi?`)) {
+        p.paid = p.paid || {}; p.paid[o.ym] = isoOf(new Date());
+        save(); closeSheets(); viewYm = o.ym; render(); showView('month');
+        toast('Ödendi olarak işaretlendi ✓');
+      }
+      return;
+    }
+  }
+  if (r.action === 'unclear') {
+    toast('Tam anlaşılamadı; lütfen formu kontrol edin');
+  }
+  openForm({
+    title: r.title, category: r.category, amount: r.amount, party: r.party,
+    recurrence: r.recurrence, dueDay: r.due_day, startYm: r.start_month, installments: r.installments,
+    dueDate: r.due_date, remindDays: r.remind_days ?? defaultRemind(), notes: r.notes || '',
+  }, (note ? note + '  ' : '') + '— Söylediğiniz: "' + text + '"');
+}
+
+/* En eski ödenmemiş vade (geçmiş 12 ay + bu ay + gelecek ay). */
+function findOpenOccurrence(p) {
+  const nowYm = ymOf(new Date());
+  for (let k = -12; k <= 1; k++) {
+    const o = occurrence(p, ymAdd(nowYm, k));
+    if (o && !(p.paid && p.paid[o.ym])) return o;
+  }
+  return null;
+}
+
+/* ---------- Takvim (.ics) hatırlatmaları ---------- */
+function icsEscape(s) { return String(s || '').replace(/[\\;,]/g, (c) => '\\' + c).replace(/\n/g, '\\n'); }
+function icsEvent(p) {
+  const remind = p.remindDays ?? defaultRemind();
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  let start, rrule = '';
+  if (p.recurrence === 'once') start = p.dueDate;
+  else {
+    const first = findOpenOccurrence(p) || occurrence(p, p.startYm);
+    if (!first) return '';
+    start = first.date;
+    const day = p.dueDay > 28 ? -1 : p.dueDay; // 29-31 → ayın son günü (Şubat vb. atlanmasın)
+    rrule = 'RRULE:FREQ=MONTHLY;BYMONTHDAY=' + day;
+    if (p.installments) {
+      const remaining = p.installments - ymDiff(p.startYm, first.ym);
+      if (remaining <= 0) return '';
+      rrule += ';COUNT=' + remaining;
+    }
+  }
+  const d = start.replace(/-/g, '');
+  const next = isoOf(new Date(parseIso(start).getTime() + 86400000)).replace(/-/g, '');
+  const desc = [CATS[p.category]?.label, p.party, p.amount != null ? money(p.amount) : null, p.notes].filter(Boolean).join(' – ');
+  const alarms = [];
+  // Tüm gün etkinliklerinde tetikleyici gece yarısına göredir: -P(n-1)DT15H = n gün önce 09:00
+  if (remind > 0) alarms.push(`BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:${icsEscape(p.title)} – ${remind} gün kaldı\r\nTRIGGER:-P${remind - 1}DT15H\r\nEND:VALARM`);
+  alarms.push(`BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:${icsEscape(p.title)} – bugün son gün\r\nTRIGGER:PT9H\r\nEND:VALARM`);
+  return ['BEGIN:VEVENT', `UID:${p.id}@odeme-takip`, `DTSTAMP:${stamp}`,
+    `DTSTART;VALUE=DATE:${d}`, `DTEND;VALUE=DATE:${next}`, rrule,
+    `SUMMARY:💳 ${icsEscape(p.title)}${p.amount != null ? ' (' + icsEscape(money(p.amount)) + ')' : ''}`,
+    `DESCRIPTION:${icsEscape(desc)}`, ...alarms, 'END:VEVENT'].filter(Boolean).join('\r\n');
+}
+function downloadIcs(list, name) {
+  const events = list.map(icsEvent).filter(Boolean);
+  if (!events.length) { toast('Takvime eklenecek ödeme yok'); return; }
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Odeme Takip//TR', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:Ödemeler', ...events, 'END:VCALENDAR'].join('\r\n');
+  downloadFile(ics, name, 'text/calendar');
+}
+function downloadFile(text, name, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: type + ';charset=utf-8' }));
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ---------- Bildirim + uygulama simgesi rozeti ---------- */
+function updateBadge() {
+  const { late, soon } = dueAlerts();
+  const n = late.length + soon.filter((o) => daysLeft(o) <= 1).length;
+  try { if (navigator.setAppBadge) n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } catch (e) {}
+}
+function notifyDue() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const key = 'odemeTakip.notified';
+  const todayIso = isoOf(new Date());
+  if (localStorage.getItem(key) === todayIso) return; // günde bir kez
+  const { late, soon } = dueAlerts();
+  if (!late.length && !soon.length) return;
+  const lines = [...late.map((o) => '⚠️ ' + o.p.title + ' – ' + whenText(o)), ...soon.map((o) => '⏰ ' + o.p.title + ' – ' + whenText(o))];
+  try { new Notification('Ödeme hatırlatması', { body: lines.slice(0, 5).join('\n'), icon: 'apple-touch-icon.png' }); localStorage.setItem(key, todayIso); } catch (e) {}
+}
+
+/* ---------- Kısayol yardım metni ---------- */
+function renderShortcutHelp() {
+  const base = location.href.split(/[?#]/)[0];
+  const isFile = location.protocol === 'file:';
+  $('shortcutHelp').innerHTML = `
+    ${isFile ? '<p class="alert warn" style="margin:0 0 10px">Kısayol için uygulama bir web adresinden açılmalıdır (README: GitHub Pages).</p>' : ''}
+    <b>Uygulama adresi</b><br><code id="appUrl">${esc(base)}</code>
+    <div class="row-btns" style="margin:8px 0 12px"><button class="btn-soft" id="copyUrl">Adresi kopyala</button></div>
+    <b>A) "Ödeme Kaydet" kısayolu (Siri ile tek cümlede kayıt)</b>
+    <ol class="steps small">
+      <li><b>Kestirmeler</b> uygulamasını açın → sağ üstte <b>+</b>.</li>
+      <li><b>Metni Dikte Et</b> eylemini ekleyin (Dil: Türkçe).</li>
+      <li><b>URL Kodla</b> eylemini ekleyin (girdi: Dikte Edilen Metin).</li>
+      <li><b>URL</b> eylemini ekleyin ve şunu yazın:<br><code>${esc(base)}?metin=</code> sonuna <i>URL Kodlanmış Metin</i> değişkenini ekleyin.</li>
+      <li><b>URL'leri Aç</b> eylemini ekleyin.</li>
+      <li>Kestirmenin adını <b>Ödeme Kaydet</b> yapın.</li>
+    </ol>
+    <p class="small">Artık <b>"Hey Siri, Ödeme Kaydet"</b> deyip ödemeyi söylemeniz yeterli; uygulama açılır, yapay zekâ cümleyi anlamlandırır ve onayınızı ister.</p>
+    <b>B) Hızlı açma kısayolu</b>
+    <ol class="steps small">
+      <li>Yeni kestirme → <b>URL</b>: <code>${esc(base)}?ses=1</code> → <b>URL'leri Aç</b>. Adı: <b>Ödemelerim</b>.</li>
+      <li>Kestirmeyi ana ekrana ekleyin: kestirmede paylaş (⬆︎) → <b>Ana Ekrana Ekle</b>.</li>
+    </ol>
+    <b>Daha da hızlı erişim</b>
+    <ul class="small" style="padding-left:20px;margin:6px 0 0">
+      <li><b>Arkaya dokunma:</b> Ayarlar → Erişilebilirlik → Dokunma → Arkaya Dokunma → İki Kez Dokunma → "Ödeme Kaydet". Telefonun arkasına iki kez vurunca kayıt başlar.</li>
+      <li><b>Eylem düğmesi</b> (iPhone 15 Pro ve sonrası): Ayarlar → Eylem Düğmesi → Kestirme → "Ödeme Kaydet".</li>
+      <li><b>Kilit ekranı / Denetim Merkezi:</b> Denetim Merkezi'ne "Kestirme" denetimi ekleyip "Ödeme Kaydet"i seçin.</li>
+    </ul>
+    <p class="small muted" style="margin-bottom:0">Not: Kestirmeler adresi Safari'de açar. Kayıtların tek yerde toplanması için uygulamayı da hep bu adresle (B kısayolu ya da Safari yer imi) açın; Safari'nin "Ana Ekrana Ekle" ile oluşturulan simgesi ayrı bir depolama kullanır.</p>`;
+  $('copyUrl').onclick = () => navigator.clipboard?.writeText(base).then(() => toast('Kopyalandı'), () => toast(base));
+}
+
+/* ---------- Olaylar ---------- */
+function bind() {
+  document.querySelectorAll('nav.tabs [data-view]').forEach((b) => (b.onclick = () => showView(b.dataset.view)));
+  $('micTab').onclick = () => { $('voiceText').value = ''; openSheet('voiceSheet'); startListening(); };
+  $('voiceBtn').onclick = startListening;
+  $('interpret').onclick = interpret;
+  $('prevMonth').onclick = () => { viewYm = ymAdd(viewYm, -1); renderMonth(); };
+  $('nextMonth').onclick = () => { viewYm = ymAdd(viewYm, 1); renderMonth(); };
+  $('addManual').onclick = () => openForm({ recurrence: 'monthly', category: 'kredi', dueDay: new Date().getDate() });
+  $('fRec').onchange = syncRecFields;
+  $('saveForm').onclick = saveForm;
+  $('deleteForm').onclick = deleteForm;
+  $('icsOne').onclick = () => { const p = db.payments.find((x) => x.id === editingId); if (p) downloadIcs([p], 'odeme.ics'); };
+  $('icsAll').onclick = () => downloadIcs(db.payments, 'odemeler.ics');
+  document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeSheets));
+  document.querySelectorAll('.sheet-bg').forEach((bg) => bg.addEventListener('click', (e) => { if (e.target === bg) closeSheets(); }));
+
+  document.body.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-toggle]');
+    if (t) { togglePaid(t.dataset.toggle, t.dataset.ym); return; }
+    const ed = e.target.closest('[data-edit]');
+    if (ed) { const p = db.payments.find((x) => x.id === ed.dataset.edit); if (p) openForm(p); return; }
+    const c = e.target.closest('[data-cat]');
+    if (c) { catFilter = c.dataset.cat; renderAll(); }
+  });
+
+  $('fCat').innerHTML = Object.entries(CATS).map(([k, c]) => `<option value="${k}">${c.ico} ${c.label}</option>`).join('');
+  $('apiKey').value = settings().apiKey || '';
+  $('model').value = settings().model || DEFAULT_MODEL;
+  $('remindDays').value = String(defaultRemind());
+  $('apiKey').onchange = () => { settings().apiKey = $('apiKey').value.trim(); save(); toast('Anahtar kaydedildi'); };
+  $('model').onchange = () => { settings().model = $('model').value.trim() || DEFAULT_MODEL; save(); };
+  $('remindDays').onchange = () => { settings().remindDays = Number($('remindDays').value); save(); render(); };
+  $('askNotif').onclick = async () => {
+    if (!('Notification' in window)) { toast('Bildirim için Safari\'de Paylaş → Ana Ekrana Ekle gerekir (iOS 16.4+)'); return; }
+    const r = await Notification.requestPermission();
+    toast(r === 'granted' ? 'Bildirimler açık' : 'İzin verilmedi');
+    notifyDue();
+  };
+
+  $('backup').onclick = () => downloadFile(JSON.stringify({ ...db, settings: { ...db.settings, apiKey: undefined } }, null, 2),
+    'odeme-yedek-' + isoOf(new Date()) + '.json', 'application/json');
+  $('restoreBtn').onclick = () => $('restoreFile').click();
+  $('restoreFile').onchange = async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      const d = JSON.parse(await f.text());
+      if (!Array.isArray(d.payments)) throw new Error();
+      if (!confirm(d.payments.length + ' kayıt yüklenecek; mevcut kayıtların yerini alacak. Devam?')) return;
+      db.payments = d.payments; save(); render(); toast('Yedek yüklendi');
+    } catch (err) { toast('Geçersiz yedek dosyası'); }
+    e.target.value = '';
+  };
+}
+
+/* Kısayoldan gelen parametreler: ?metin=... (dikte edilmiş cümle) veya ?ses=1 (sesli kaydı aç) */
+function handleLaunchParams() {
+  const q = new URLSearchParams(location.search);
+  const metin = q.get('metin');
+  if (metin || q.has('ses')) {
+    history.replaceState(null, '', location.pathname);
+    $('voiceText').value = metin || '';
+    openSheet('voiceSheet');
+    if (metin) interpret();
+    else $('voiceHint').textContent = 'Konuşmak için 🎙️ düğmesine dokunun.';
+  } else if (q.get('sekme') === 'kayitlar') showView('all');
+}
+
+viewYm = ymOf(new Date());
+bind();
+render();
+renderShortcutHelp();
+updateBadge();
+notifyDue();
+handleLaunchParams();
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); notifyDue(); updateBadge(); } });
+</script>
+</body>
+</html>
