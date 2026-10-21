@@ -19,7 +19,7 @@ export class HomeStore {
     this.getAccessToken = getAccessToken;
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.fetch = fetchImpl || globalThis.fetch.bind(globalThis);
-    this.raw = { states: [], devices: [], entities: [], areas: [], floors: [], configEntries: [], manifests: [] };
+    this.raw = { states: [], devices: [], entities: [], areas: [], floors: [], configEntries: [], manifests: [], entitySources: {} };
     this.statesById = new Map();
     this.home = { areas: [], devices: new Map(), entities: new Map(), integrations: [] };
     this.config = null;
@@ -77,11 +77,12 @@ export class HomeStore {
       ws.sendMessage({ type: 'auth/current_user' }),
     ]);
     const floors = await ws.sendMessage({ type: 'config/floor_registry/list' }).catch(() => []);
-    const domains = new Set([...configEntries.map((e) => e.domain), ...entities.map((e) => e.platform)]);
+    const entitySources = await ws.sendMessage({ type: 'entity/source' }).catch(() => ({}));
+    const domains = new Set([...configEntries.map((e) => e.domain), ...entities.map((e) => e.platform), ...Object.values(entitySources).map((x) => x.domain)]);
     const manifests = await ws.sendMessage({ type: 'manifest/list', integrations: [...domains] }).catch(() => []);
     this.config = config;
     this.user = user;
-    this.raw = { states, devices, entities, areas, floors, configEntries, manifests };
+    this.raw = { states, devices, entities, areas, floors, configEntries, manifests, entitySources };
     this._rebuild();
     if (!this.loaded) await this._subscribe();
     this.loaded = true;
@@ -342,6 +343,10 @@ export class HomeStore {
 
   startFlow(handler) {
     return this.rest('POST', '/api/config/config_entries/flow', { handler, show_advanced_options: false });
+  }
+
+  getFlow(flowId) {
+    return this.rest('GET', `/api/config/config_entries/flow/${encodeURIComponent(flowId)}`);
   }
 
   continueFlow(flowId, data) {

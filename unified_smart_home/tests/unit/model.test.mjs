@@ -27,6 +27,16 @@ test('gerçek HA demo verisinden model kurulur', () => {
   assert.ok(bed.deviceId, 'cihaz kaydı ile ilişkilendirilmeli');
 });
 
+test('kayıt defterinde olmayan varlık da entity/source ile doğru entegrasyona bağlanır (simülasyon etiketi kaybolmaz)', () => {
+  const home = buildHome(fx);
+  const lock = home.entities.get('lock.front_door');
+  assert.equal(fx.entities.some((e) => e.entity_id === 'lock.front_door'), false, 'ön koşul: kayıt yok');
+  assert.equal(lock.integration, 'demo');
+  assert.equal(lock.simulated, true);
+  const noSrc = buildHome({ ...fx, entitySources: undefined }).entities.get('lock.front_door');
+  assert.equal(noSrc.connectivity, Connectivity.UNVERIFIED, 'kaynak bilinmiyorsa uydurulmaz');
+});
+
 test('cihaza ait olmayan sistem alanları (zone, sun, update) cihaz listesine girmez', () => {
   const home = buildHome(fx);
   for (const id of home.entities.keys()) {

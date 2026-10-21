@@ -255,10 +255,9 @@ function indexBy(list, key) {
  * @param {Array} [raw.floors]
  * @param {Array} [raw.configEntries] config_entries/get
  * @param {Array} [raw.manifests] manifest/list
+ * @param {Object} [raw.entitySources] entity/source — kayıt defterinde olmayan varlıkların da entegrasyonu
  */
 export function buildHome(raw) {
-  const statesById = indexBy(raw.states, 'entity_id');
-  const devById = indexBy(raw.devices, 'id');
   const regById = indexBy(raw.entities, 'entity_id');
   const entryById = indexBy(raw.configEntries, 'entry_id');
   const manifestByDomain = indexBy(raw.manifests, 'domain');
@@ -330,7 +329,8 @@ export function buildHome(raw) {
     const reg = regById.get(entityId) || null;
     if (reg && (reg.hidden_by || reg.disabled_by)) continue;
     const device = reg && reg.device_id ? devices.get(reg.device_id) : null;
-    const platform = reg ? reg.platform : null;
+    const source = raw.entitySources && raw.entitySources[entityId];
+    const platform = (reg && reg.platform) || (source && source.domain) || null;
     const integ = platform ? integrationFor(platform) : null;
     const entity = {
       id: entityId,
@@ -339,6 +339,7 @@ export function buildHome(raw) {
       deviceId: device ? device.id : null,
       areaId: (reg && reg.area_id) || (device && device.areaId) || null,
       integration: platform,
+      integrationName: (device && device.integrationName) || (integ && integ.name) || platform,
       connectivity: device ? device.connectivity : integ ? integ.connectivity : Connectivity.UNVERIFIED,
       simulated: platform === 'demo' || (device && device.simulated) || false,
       category: (reg && reg.entity_category) || null,

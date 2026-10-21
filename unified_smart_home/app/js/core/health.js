@@ -72,14 +72,16 @@ export function buildHealthReport(p) {
   items.push({
     key: 'internet',
     title: 'Ev internet erişimi (çıkarım)',
-    level: !connected ? Level.UNKNOWN : !cloud.length ? Level.UNKNOWN : cloudBad.length === cloud.length ? Level.WARN : Level.OK,
+    level: !connected ? Level.UNKNOWN : !cloud.length ? Level.UNKNOWN : cloudBad.length ? Level.WARN : Level.OK,
     text: !connected
       ? 'Merkeze bağlanılamadığı için bilinmiyor'
       : !cloud.length
         ? 'Bulut entegrasyonu olmadığından ölçülemiyor'
         : cloudBad.length === cloud.length
           ? 'Tüm bulut entegrasyonları erişilemez durumda; ev internetinde sorun olabilir'
-          : 'Bulut entegrasyonları erişilebilir',
+          : cloudBad.length
+            ? `${cloudBad.length}/${cloud.length} bulut entegrasyonuna ulaşılamıyor (${cloudBad.map((i) => i.name).join(', ')}); internet kısmen çalışıyor veya üretici sunucusunda sorun var`
+            : 'Bulut entegrasyonları erişilebilir',
     details: 'Bu bilgi doğrudan ölçüm değildir; bulut tabanlı entegrasyonların bağlantı durumundan çıkarılır.',
   });
 
