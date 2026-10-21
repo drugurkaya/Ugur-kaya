@@ -133,7 +133,7 @@ for (let i = 0; i < 30; i++) {
 }
 s = await state();
 check('attacks register hits / damage', s.hits[0] > 0 || s.hp[1] < hp0[1], `p1 hits ${s.hits[0]}, cpu hp ${s.hp[1]}`);
-check('health bars update', s.hp[1] < 1150 || s.hp[0] < 1000, `hp ${s.hp.join('/')}`);
+check('health bars update', s.hp[1] < 1180 || s.hp[0] < 1000, `hp ${s.hp.join('/')}`);
 // Block for a while and let the AI attack.
 await page.keyboard.down('KeyL');
 for (let i = 0; i < 60; i++) {
@@ -170,7 +170,7 @@ await page.waitForTimeout(900);
 await shot('09-ko');
 await page.waitForFunction(() => window.__game.match?.phase === 'ready' || window.__game.match?.phase === 'matchEnd', null, { timeout: 60000 });
 s = await state();
-check('next round resets health', s.hp[1] === 1150 && s.round === 2, `round ${s.round} hp ${s.hp}`);
+check('next round resets health', s.hp[1] === 1180 && s.round === 2, `round ${s.round} hp ${s.hp}`);
 
 // Second KO → match end.
 await page.waitForFunction(() => window.__game.match?.phase === 'fight', null, { timeout: 60000 });
@@ -188,6 +188,75 @@ await key('Enter');
 await page.waitForTimeout(800);
 s = await state();
 check('rematch restarts cleanly', s.screen === 'match' && s.round === 1 && s.wins[0] === 0 && s.wins[1] === 0 && s.hp[0] === 1000, JSON.stringify({ r: s.round, w: s.wins, hp: s.hp }));
+
+// Special attack with a full meter.
+await page.waitForFunction(() => window.__game.match?.phase === 'fight', null, { timeout: 60000 });
+await page.evaluate(() => (window.__game.match.fighters[0].meter = 100));
+for (let i = 0; i < 60; i++) {
+  const st = await state();
+  if (st.dist > 1.6) {
+    await page.keyboard.down('KeyD');
+    await page.waitForTimeout(200);
+    await page.keyboard.up('KeyD');
+  } else break;
+}
+await key('KeyO', 50);
+await page.waitForTimeout(1500);
+const sp = await page.evaluate(() => window.__game.match.stats.specials[0]);
+check('special attack fires with full meter', sp >= 1, `specials ${sp}`);
+await shot('11-special');
+
+// Back to the main menu through the pause menu.
+await key('Escape');
+await page.waitForTimeout(300);
+for (let i = 0; i < 5; i++) await key('ArrowDown', 30);
+await key('Enter');
+await page.waitForTimeout(500);
+s = await state();
+check('pause → main menu', s.screen === 'main', s.screen);
+
+// Graphics settings: cycle quality presets and toggles.
+for (let i = 0; i < 4; i++) await key('ArrowDown', 30);
+await key('Enter');
+await page.waitForTimeout(300);
+s = await state();
+check('graphics settings open', s.screen === 'graphics', s.screen);
+await key('ArrowRight', 30);
+await page.waitForTimeout(800);
+await key('ArrowRight', 30);
+await page.waitForTimeout(800);
+const q = await page.evaluate(() => window.__game.settings.data.quality);
+await shot('12-graphics');
+for (let i = 0; i < 2; i++) await key('ArrowLeft', 30);
+await page.waitForTimeout(500);
+check('quality preset changes apply', ['ultra', 'low', 'medium', 'high'].includes(q), q);
+await key('Escape');
+await page.waitForTimeout(300);
+
+// Controls: rebind light punch to P, verify, restore defaults.
+await key('ArrowUp', 30);
+await key('Enter');
+await page.waitForTimeout(300);
+s = await state();
+check('controls screen open', s.screen === 'controls', s.screen);
+for (let i = 0; i < 4; i++) await key('ArrowDown', 30);
+await key('Enter');
+await page.waitForTimeout(200);
+await key('KeyP');
+await page.waitForTimeout(200);
+const lp = await page.evaluate(() => window.__game.settings.data.bindings.lp);
+check('key rebinding works', lp === 'KeyP', lp);
+await shot('13-controls');
+await page.evaluate(() => window.__game.settings.resetBindings());
+await key('Escape');
+await page.waitForTimeout(300);
+
+// Mirror match via the test hook (alternate costume for player 2).
+await page.evaluate(() => window.__game.quickMatch('ironfang', 'ironfang', 'hard'));
+await page.waitForTimeout(2500);
+s = await state();
+check('mirror match (hard) starts', s.screen === 'match' && ['ready', 'fight'].includes(s.phase), `${s.screen}/${s.phase}`);
+await shot('14-mirror');
 
 // Perf sample (software rendering — not representative of a GPU).
 const f0 = await state();

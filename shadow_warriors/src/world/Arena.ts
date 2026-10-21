@@ -514,13 +514,15 @@ export class Arena {
         new THREE.MeshBasicMaterial({ color: new THREE.Color('#3fd8ff').multiplyScalar(2.0) }),
       );
       halo.add(ring, inner);
+      const segs: THREE.BufferGeometry[] = [];
       for (let k = 0; k < 12; k++) {
-        const seg = new THREE.Mesh(new THREE.BoxGeometry(1.2 * s, 2.6 * s, 1.6 * s), stoneMat);
         const ang = (k / 12) * Math.PI * 2;
-        seg.position.set(Math.cos(ang) * 12 * s, Math.sin(ang) * 12 * s, 0);
-        seg.rotation.z = ang;
-        halo.add(seg);
+        const seg = new THREE.BoxGeometry(1.2 * s, 2.6 * s, 1.6 * s);
+        seg.rotateZ(ang);
+        seg.translate(Math.cos(ang) * 12 * s, Math.sin(ang) * 12 * s, 0);
+        segs.push(seg);
       }
+      halo.add(new THREE.Mesh(mergeGeometries(segs), stoneMat));
       this.group.add(halo);
     }
   }

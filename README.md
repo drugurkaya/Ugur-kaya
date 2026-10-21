@@ -77,6 +77,23 @@ Ses gelmiyorsa iPhone'un sessiz düğmesini kapatın.
 
 ---
 
+## ⚔️ Shadow Warriors: Rise of the Last Fighter (3D dövüş oyunu)
+
+[`shadow_warriors/`](shadow_warriors/README.md): masaüstü tarayıcı için Three.js + TypeScript ile yazılmış
+gerçek zamanlı 3D dövüş oyunu. İki dövüşçü (The Phantom, Iron Fang), kombo ve özel güç sistemi,
+üç zorluk seviyeli yapay zekâ, karanlık tapınak arenası, menüler ve ayarlar.
+
+```bash
+cd shadow_warriors
+npm install
+npm run dev
+```
+
+GitHub Pages'te `https://<kullanıcı-adı>.github.io/<depo>/shadow_warriors/` adresinden de açılır.
+Klavye: W/A/S/D hareket, J/K yumruk, U/I tekme, L blok, Space kaçınma, O özel saldırı, Esc duraklat.
+
+---
+
 ## 💳 Ödeme Takip (iPhone, sesli kayıt + yapay zekâ)
 
 [`odeme_takip/index.html`](odeme_takip/index.html): banka ödemeleri, kredi taksitleri, kredi kartı, fatura,

@@ -26,7 +26,7 @@ export class CameraRig {
   private side = new THREE.Vector3(0, 0, 1);
   private trauma = 0;
   private time = 0;
-  private cine: { t: number; dur: number; subject: CamSubject; kind: 'special' | 'counter' } | null = null;
+  private cine: { t: number; dur: number; subject: CamSubject; attacker: number; kind: 'special' | 'counter' } | null = null;
   shakeScale = 1;
   readonly manualPos = new THREE.Vector3(0, 1.4, 4);
   readonly manualTarget = new THREE.Vector3(0, 1.1, 0);
@@ -46,8 +46,9 @@ export class CameraRig {
     this.trauma = Math.min(1, this.trauma + amount * this.shakeScale);
   }
 
-  cinematic(subject: CamSubject, dur: number, kind: 'special' | 'counter' = 'special'): void {
-    this.cine = { t: 0, dur, subject, kind };
+  /** Short cinematic around fighter `attacker` (0 or 1, matching the subjects passed to update). */
+  cinematic(subject: CamSubject, attacker: number, dur: number, kind: 'special' | 'counter' = 'special'): void {
+    this.cine = { t: 0, dur, subject, attacker, kind };
   }
 
   /** Jump straight to the computed framing (round start). */
@@ -132,27 +133,38 @@ export class CameraRig {
       }
     }
 
-    // Cinematic override (specials): sweep around the attacker, then hand back.
+    // Cinematic override (specials): low side angle that keeps attacker and
+    // defender framed while it sweeps, then hands back to the fight camera.
     if (this.cine) {
       const c = this.cine;
       c.t += dt;
       const k = c.t / c.dur;
       if (k >= 1) this.cine = null;
       else {
-        const s = c.subject;
-        const fx = Math.sin(s.yaw);
-        const fz = Math.cos(s.yaw);
-        const lx = fz;
-        const lz = -fx;
-        const sweep = -0.6 + k * 1.2;
-        const d = 2.6;
-        const w = k < 0.75 ? 1 : 1 - (k - 0.75) / 0.25;
-        const cp = new THREE.Vector3(s.x + fx * d * Math.cos(sweep) + lx * d * Math.sin(sweep), 1.0 + k * 0.4, s.z + fz * d * Math.cos(sweep) + lz * d * Math.sin(sweep));
-        const ct = new THREE.Vector3(s.x + fx * 0.6, 1.2, s.z + fz * 0.6);
+        const att = c.attacker === 0 ? a : b;
+        const def = att === a ? b : a;
+        const mx = (att.x + def.x) / 2;
+        const mz = (att.z + def.z) / 2;
+        const fx = Math.sin(att.yaw);
+        const fz = Math.cos(att.yaw);
+        // Side of the fight line the camera is already on.
+        let sx = fz;
+        let sz = -fx;
+        if (sx * this.side.x + sz * this.side.z < 0) {
+          sx = -sx;
+          sz = -sz;
+        }
+        const sweep = -0.55 + k * 0.5;
+        const d = 4.3;
+        const cx = sx * Math.cos(sweep) - fx * Math.sin(sweep);
+        const cz = sz * Math.cos(sweep) - fz * Math.sin(sweep);
+        const w = k < 0.7 ? Math.min(1, k * 6) : 1 - (k - 0.7) / 0.3;
+        const cp = new THREE.Vector3(mx + cx * d, 1.15 + k * 0.3, mz + cz * d);
+        const ct = new THREE.Vector3(mx * 0.6 + att.x * 0.4, 1.05, mz * 0.6 + att.z * 0.4);
         wantPos.lerp(cp, w);
         wantTarget.lerp(ct, w);
-        lambda = 7;
-        fov = 30;
+        lambda = 6;
+        fov = 32;
       }
     }
 
@@ -206,7 +218,7 @@ export class CameraRig {
     }
     // Rotate the stored side smoothly (limits sudden swings when fighters circle).
     this.side.set(this.side.x + (sx - this.side.x) * 0.25, 0, this.side.z + (sz - this.side.z) * 0.25).normalize();
-    const dist = clamp(2.6 + sep * 1.05, 3.9, 9.5);
+    const dist = clamp(2.4 + sep * 1.3, 4.0, 10.5);
     const height = 1.2 + dist * 0.11;
     outPos.set(mid.x + this.side.x * dist, height, mid.z + this.side.z * dist);
     // Pull the camera inward if it would leave the ruin ring; widen fov to compensate.

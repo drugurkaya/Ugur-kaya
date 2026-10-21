@@ -12,7 +12,7 @@ const fresnelMaterial = (color: THREE.Color, opacity: number): THREE.ShaderMater
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    uniforms: { uColor: { value: color.clone() }, uOpacity: { value: opacity }, uPower: { value: 2.0 } },
+    uniforms: { uColor: { value: color.clone() }, uOpacity: { value: opacity }, uPower: { value: 2.0 }, uBase: { value: 0.15 } },
     vertexShader: /* glsl */ `
       #include <common>
       #include <skinning_pars_vertex>
@@ -30,11 +30,11 @@ const fresnelMaterial = (color: THREE.Color, opacity: number): THREE.ShaderMater
       }
     `,
     fragmentShader: /* glsl */ `
-      uniform vec3 uColor; uniform float uOpacity, uPower;
+      uniform vec3 uColor; uniform float uOpacity, uPower, uBase;
       varying vec3 vN; varying vec3 vV;
       void main() {
         float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), uPower);
-        gl_FragColor = vec4(uColor * (0.15 + f) * uOpacity, 1.0);
+        gl_FragColor = vec4(uColor * (uBase + f) * uOpacity, 1.0);
       }
     `,
   });
@@ -43,28 +43,49 @@ let blobTex: THREE.Texture | null = null;
 
 class Ghost {
   mesh: THREE.SkinnedMesh;
+  /** Depth-only pre-pass so only the front-most surface of the afterimage shows. */
+  depth: THREE.SkinnedMesh;
   bones: THREE.Bone[];
   mat: THREE.ShaderMaterial;
   life = 0;
-  constructor(src: THREE.SkinnedMesh, color: THREE.Color) {
+  constructor(src: THREE.SkinnedMesh, color: THREE.Color, order: number) {
     this.bones = src.skeleton.bones.map(() => {
       const b = new THREE.Bone();
       b.matrixAutoUpdate = false;
       b.matrixWorldAutoUpdate = false;
       return b;
     });
+    const skeleton = new THREE.Skeleton(this.bones, src.skeleton.boneInverses);
     this.mat = fresnelMaterial(color, 0);
+    this.mat.uniforms.uBase.value = 0.08;
+    // Pushed slightly back in depth so a ghost that coincides with the live body stays hidden.
+    this.mat.polygonOffset = true;
+    this.mat.polygonOffsetFactor = 4;
+    this.mat.polygonOffsetUnits = 8;
     this.mesh = new THREE.SkinnedMesh(src.geometry, this.mat);
-    this.mesh.bindMode = THREE.DetachedBindMode;
-    this.mesh.bind(new THREE.Skeleton(this.bones, src.skeleton.boneInverses), new THREE.Matrix4());
-    this.mesh.frustumCulled = false;
-    this.mesh.visible = false;
-    this.mesh.renderOrder = 8;
+    // Transparent queue so the pre-pass never occludes the opaque fighter itself.
+    this.depth = new THREE.SkinnedMesh(
+      src.geometry,
+      new THREE.MeshBasicMaterial({ colorWrite: false, transparent: true, depthWrite: true, polygonOffset: true, polygonOffsetFactor: 4, polygonOffsetUnits: 8 }),
+    );
+    for (const [m, ro] of [
+      [this.depth, 7 + order * 2],
+      [this.mesh, 8 + order * 2],
+    ] as const) {
+      m.bindMode = THREE.DetachedBindMode;
+      m.bind(skeleton, new THREE.Matrix4());
+      m.frustumCulled = false;
+      m.visible = false;
+      m.renderOrder = ro;
+    }
   }
   capture(src: THREE.SkinnedMesh): void {
     src.skeleton.bones.forEach((b, i) => this.bones[i].matrixWorld.copy(b.matrixWorld));
     this.life = 1;
-    this.mesh.visible = true;
+    this.mesh.visible = this.depth.visible = true;
+  }
+  hide(): void {
+    this.mesh.visible = this.depth.visible = false;
   }
 }
 
@@ -118,6 +139,7 @@ export class FighterView {
 
     this.rimMat = fresnelMaterial(model.energy, 0);
     this.rimMat.uniforms.uPower.value = 3;
+    this.rimMat.uniforms.uBase.value = 0;
     this.rim = new THREE.SkinnedMesh(model.mesh.geometry, this.rimMat);
     this.rim.bind(model.mesh.skeleton, model.mesh.bindMatrix);
     this.rim.frustumCulled = false;
@@ -125,19 +147,19 @@ export class FighterView {
     model.mesh.add(this.rim);
 
     for (let i = 0; i < 5; i++) {
-      const g = new Ghost(model.mesh, model.energy);
+      const g = new Ghost(model.mesh, model.energy, i);
       this.ghosts.push(g);
-      scene.add(g.mesh);
+      scene.add(g.depth, g.mesh);
     }
     for (const m of model.materials) {
-      if ('emissive' in m) this.baseEmissive.push({ m, c: m.emissive.clone(), i: m.emissiveIntensity });
+      if ('emissive' in m && !model.glowMats.includes(m)) this.baseEmissive.push({ m, c: m.emissive.clone(), i: m.emissiveIntensity });
     }
   }
 
   dispose(scene: THREE.Scene): void {
     scene.remove(this.group, this.blob);
     for (const r of this.model.ribbons) scene.remove(r.mesh);
-    for (const g of this.ghosts) scene.remove(g.mesh);
+    for (const g of this.ghosts) scene.remove(g.mesh, g.depth);
   }
 
   hitFlash(color: THREE.Color, strength: number): void {
@@ -160,7 +182,7 @@ export class FighterView {
     for (const r of this.model.ribbons) r.reset();
     for (const g of this.ghosts) {
       g.life = 0;
-      g.mesh.visible = false;
+      g.hide();
     }
   }
 
@@ -218,7 +240,7 @@ export class FighterView {
 
     // Energy rim: full meter pulse, strong during specials.
     const special = f.state === 'attack' && f.move?.sfx === 'special';
-    const rimTarget = special ? 1.6 : meterFull ? 0.35 + Math.sin(t * 6) * 0.15 : 0;
+    const rimTarget = special ? 0.9 : meterFull ? 0.35 + Math.sin(t * 6) * 0.15 : 0;
     const cur = this.rimMat.uniforms.uOpacity.value as number;
     this.rimMat.uniforms.uOpacity.value = damp(cur, rimTarget, 10, dt);
     this.rim.visible = this.rimMat.uniforms.uOpacity.value > 0.01;
@@ -228,7 +250,7 @@ export class FighterView {
     const trailing = special || f.state === 'dash' || f.state === 'sidestep' || f.state === 'backdash';
     this.ghostTimer -= dt;
     if (trailing && this.ghostTimer <= 0) {
-      this.ghostTimer = special ? 0.035 : 0.06;
+      this.ghostTimer = special ? 0.06 : 0.07;
       const g = this.ghosts[this.ghostIdx];
       this.ghostIdx = (this.ghostIdx + 1) % this.ghosts.length;
       g.capture(this.model.mesh);
@@ -237,21 +259,17 @@ export class FighterView {
     for (const g of this.ghosts) {
       if (!g.mesh.visible) continue;
       g.life -= dt * 3.2;
-      if (g.life <= 0) g.mesh.visible = false;
+      if (g.life <= 0) g.hide();
       g.mat.uniforms.uOpacity.value = Math.max(0, g.life) * 0.9;
     }
 
-    // Hit flash via emissive override.
-    if (this.flash > 0.001) {
+    // Hit flash via emissive override; reaching exactly 0 restores the base emissive.
+    if (this.flash > 0) {
       this.flash = Math.max(0, this.flash - dt * 7);
+      const k = Math.min(1, this.flash) * 0.6;
       for (const e of this.baseEmissive) {
-        e.m.emissive.copy(e.c).lerp(this.flashColor, Math.min(1, this.flash));
-        e.m.emissiveIntensity = e.i + this.flash * 1.5;
-      }
-    } else if (this.flash === 0 && this.baseEmissive.length && this.baseEmissive[0].m.emissiveIntensity !== this.baseEmissive[0].i) {
-      for (const e of this.baseEmissive) {
-        e.m.emissive.copy(e.c);
-        e.m.emissiveIntensity = e.i;
+        e.m.emissive.copy(e.c).lerp(this.flashColor, k);
+        e.m.emissiveIntensity = e.i + this.flash * 0.8;
       }
     }
   }
@@ -261,5 +279,10 @@ export class FighterView {
     this.group.visible = v;
     this.blob.visible = v;
     for (const r of this.model.ribbons) r.mesh.visible = v;
+    if (!v)
+      for (const g of this.ghosts) {
+        g.life = 0;
+        g.hide();
+      }
   }
 }

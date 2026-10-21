@@ -54,6 +54,8 @@ export class Game {
   private fpsTimer = 0;
   private fpsFrames = 0;
   private fpsText = '';
+  lastCalls = 0;
+  lastTris = 0;
   private auraTimer = 0;
   private selectSide = 0;
   private selectReady = [false, false];
@@ -544,6 +546,7 @@ export class Game {
     items.forEach((it, i) => it.classList.toggle('focus', i === 0));
     this.ui.show('results');
     this.ui.hud.setBarsVisible(false);
+    this.ui.hud.clearAnnounce();
   }
 
   private openSelectFromMatch(): void {
@@ -562,11 +565,16 @@ export class Game {
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     this.stats.frames++;
+    const info = this.renderer.webgl.info;
+    info.autoReset = false;
+    this.lastCalls = info.render.calls;
+    this.lastTris = info.render.triangles;
+    info.reset();
     this.input.pollGamepad();
     this.fpsFrames++;
     this.fpsTimer += dt;
     if (this.fpsTimer >= 0.5) {
-      this.fpsText = `${Math.round(this.fpsFrames / this.fpsTimer)} FPS · ${this.renderer.webgl.info.render.calls} draw · ${this.vfx.count} prt`;
+      this.fpsText = `${Math.round(this.fpsFrames / this.fpsTimer)} FPS · ${this.lastCalls} draw · ${Math.round(this.lastTris / 1000)}k tri · ${this.vfx.count} prt`;
       this.fpsTimer = 0;
       this.fpsFrames = 0;
     }
@@ -593,17 +601,17 @@ export class Game {
         if (this.dummyTimers[i] > 2.4) d.setState('idle');
       }
       // Face the camera in select, face each other on the title screen.
-      const want = inSelect ? (i === 0 ? 0.35 : -0.35) : i === 0 ? Math.PI / 2 - 0.25 : -Math.PI / 2 + 0.25;
+      const want = inSelect ? (i === 0 ? 0.3 : -0.3) : i === 0 ? Math.PI / 2 - 0.25 : -Math.PI / 2 + 0.25;
       d.prevYaw = d.yaw = damp(d.yaw, want, 4, dt);
-      const tx = inSelect ? (i === 0 ? -0.95 : 0.95) : i === 0 ? -1.25 : 1.25;
+      const tx = inSelect ? (i === 0 ? -0.7 : 0.7) : i === 0 ? -1.25 : 1.25;
       d.pos.x = d.prevPos.x = damp(d.pos.x, tx, 4, dt);
       this.active![i].update(d, (this.dummyTimers[i] * 60) % 1, dt, false);
     });
     if (inSelect) {
       this.cam.mode = 'manual';
-      const fx = this.selectSide === 0 ? -0.95 : 0.95;
-      this.cam.manualPos.set(fx * 0.55, 1.45, 3.7);
-      this.cam.manualTarget.set(fx * 0.75, 1.0, 0);
+      const fx = this.selectSide === 0 ? -1 : 1;
+      this.cam.manualPos.set(fx * 0.25, 1.5, 4.9);
+      this.cam.manualTarget.set(fx * 0.2, 1.3, 0);
     } else if (this.screen === 'menu') this.cam.mode = 'menu';
     const a = this.dummies[0];
     const b = this.dummies[1];
@@ -655,7 +663,7 @@ export class Game {
       this.timeScale = this.slowScale;
     } else this.timeScale = damp(this.timeScale, 1, 6, dt);
 
-    this.acc += dt * this.timeScale;
+    this.acc += this.manualSim ? 0 : dt * this.timeScale;
     let steps = 0;
     while (this.acc >= STEP && steps < 6) {
       const af = this.input.consume();
@@ -736,6 +744,9 @@ export class Game {
           this.ai?.reset();
           break;
         case 'fight':
+          if (this.cam.mode === 'intro') this.cam.mode = 'fight';
+          hud.setBarsVisible(true);
+          hud.setSkipHint(false);
           break;
         case 'ko':
         case 'timeup':
@@ -775,7 +786,7 @@ export class Game {
           const f = m.fighters[e.fighter];
           const v = this.active![e.fighter];
           this.audio.special(f.def.id);
-          this.cam.cinematic({ x: f.pos.x, y: 0, z: f.pos.z, yaw: f.yaw }, 0.95);
+          this.cam.cinematic({ x: f.pos.x, y: 0, z: f.pos.z, yaw: f.yaw }, e.fighter, 1.0);
           this.slow(0.45, 0.45);
           this.vfx.energy(f.pos.x, 1, f.pos.z, v.model.energy, 60, 0.6);
           this.arena.runePulse = 1;
@@ -936,6 +947,23 @@ export class Game {
     this.settings.update({ difficulty });
     this.startMatch();
     if (skipIntro) this.match!.skipIntro();
+  }
+
+  /** When true the simulation only advances through `debugStep` (tests/screenshots). */
+  manualSim = false;
+
+  /** Advance the match by n frames; P1 presses `buttons` on the first frame. CPU idles unless `ai`. */
+  debugStep(n: number, buttons: Button[] = [], hold: Partial<FighterInput> = {}, ai = false): void {
+    const m = this.match;
+    if (!m) return;
+    for (let i = 0; i < n; i++) {
+      const p1: FighterInput = { fwd: 0, lat: 0, block: false, dodge: false, ...hold, pressed: new Set(i === 0 ? buttons : []) };
+      const p2 = ai && this.ai ? this.ai.update(m, 1) : { fwd: 0, lat: 0, block: false, dodge: false, pressed: new Set<Button>() };
+      m.step([p1, p2]);
+      this.handleEvents(m.events);
+      this.handlePhase();
+    }
+    this.renderViews(1, 1 / 60);
   }
 
   get screenName(): string {

@@ -306,7 +306,7 @@ function phantomClips(): Record<string, Clip> {
       b,
       M.p_round,
       { hips: [0, -0.06, 0], bones: { hips: [0, 40, 0], spine: [0, -20, 4], chest: [0, -16, 0], head: [0, -26, 0], thighR: [-60, 0, -40], shinR: [100, 0, 0] }, ikR: 0, footYawL: 60 },
-      { hips: [0.04, -0.04, -0.02], bones: { hips: [0, 72, -16], spine: [-10, -26, 18], chest: [-6, -20, 10], neck: [0, -16, 0], head: [-6, -30, -10], thighR: [-20, 0, -102], shinR: [8, 0, 0], footR: [40, 0, 0], upperArmL: [-40, 20, 50], foreArmL: [-100, 0, 0], upperArmR: [-10, 0, -40], foreArmR: [-60, 0, 0] }, ikR: 0, footYawL: 90 },
+      { hips: [0.04, -0.02, -0.02], bones: { hips: [0, 76, -32], spine: [-8, -28, 30], chest: [-4, -20, 14], neck: [0, -16, -8], head: [-6, -30, -18], thighR: [-22, 0, -122], shinR: [8, 0, 0], footR: [40, 0, 0], upperArmL: [-40, 20, 50], foreArmL: [-100, 0, 0], upperArmR: [-10, 0, -40], foreArmR: [-60, 0, 0] }, ikR: 0, footYawL: 90 },
       { bones: { hips: [0, 95, -10], thighR: [-30, 0, -80], shinR: [60, 0, 0] } },
     ),
     // Phantom Rush: vanishing dash + 4-hit flurry ending in a rising spin kick.

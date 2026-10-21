@@ -385,10 +385,10 @@ export function buildPhantom(texSize: number): CharacterModel {
     wrap: makeMaterial({ color: '#4d4a44', kind: 'fabric', repeat: 8, sheen: '#8a857a' }, texSize),
     leather: makeMaterial({ color: '#2b211c', kind: 'leather', repeat: 4, roughness: 0.75, clearcoat: 0.25 }, texSize),
     hood: makeMaterial({ color: '#121418', kind: 'fabric', repeat: 6, sheen: '#3a3f4c' }, texSize),
-    skin: makeMaterial({ color: '#a8735a', kind: 'skin', repeat: 3, roughness: 0.62 }, texSize),
+    skin: makeMaterial({ color: '#9a7462', kind: 'skin', repeat: 2, roughness: 0.62, normalScale: 0.25 }, texSize),
     sash: makeMaterial({ color: '#4a1420', kind: 'fabric', repeat: 6, sheen: '#7a2a3a', side: THREE.DoubleSide }, texSize),
     metal: makeMaterial({ color: '#5d6168', kind: 'metal', repeat: 2, metalness: 1, roughness: 0.9 }, texSize),
-    eye: new THREE.MeshPhysicalMaterial({ color: '#0d0d10', roughness: 0.15, clearcoat: 1, emissive: ENERGY, emissiveIntensity: 0.18 }),
+    eye: new THREE.MeshPhysicalMaterial({ color: '#16120f', roughness: 0.1, clearcoat: 1, emissive: ENERGY, emissiveIntensity: 0.04 }),
   };
 
   for (const [k, m] of Object.entries(mats)) m.name = k;
@@ -466,8 +466,8 @@ export function buildPhantom(texSize: number): CharacterModel {
   mask.translate(0, headCY + 0.004, 0.006);
   bb.geometry('hood', mask, () => [['head', 1]]);
   for (const sx of [1, -1]) {
-    const e = new THREE.SphereGeometry(0.011, 12, 8);
-    e.scale(1.35, 0.7, 0.6);
+    const e = new THREE.SphereGeometry(0.008, 12, 8);
+    e.scale(1.3, 0.65, 0.6);
     e.translate(sx * 0.034, headCY + 0.02, 0.108);
     bb.geometry('eye', e, () => [['head', 1]]);
     const brow = new THREE.BoxGeometry(0.032, 0.007, 0.01);
@@ -586,9 +586,9 @@ export function buildIronFang(texSize: number): CharacterModel {
   const mats = {
     armor: makeMaterial({ color: '#7a7e86', kind: 'metal', repeat: 2, metalness: 1, roughness: 1, normalScale: 0.8 }, texSize),
     dark: makeMaterial({ color: '#34363b', kind: 'metal', repeat: 2, metalness: 0.9, roughness: 1 }, texSize),
-    trim: makeMaterial({ color: '#a07a44', kind: 'metal', repeat: 3, metalness: 1, roughness: 0.9 }, texSize),
+    trim: makeMaterial({ color: '#c09858', kind: 'metal', repeat: 3, metalness: 1, roughness: 0.7 }, texSize),
     leather: makeMaterial({ color: '#3a2a20', kind: 'leather', repeat: 4, roughness: 0.8, clearcoat: 0.2 }, texSize),
-    skin: makeMaterial({ color: '#7a523c', kind: 'skin', repeat: 3, roughness: 0.6, sheen: '#6a3424' }, texSize),
+    skin: makeMaterial({ color: '#6e5040', kind: 'skin', repeat: 2, roughness: 0.6, sheen: '#5a3424', normalScale: 0.3 }, texSize),
     cloth: makeMaterial({ color: '#2e100d', kind: 'fabric', repeat: 6, sheen: '#5a2219', side: THREE.DoubleSide }, texSize),
     under: makeMaterial({ color: '#1e1c1b', kind: 'fabric', repeat: 6, sheen: '#4a4440' }, texSize),
     glow: new THREE.MeshStandardMaterial({ color: '#000000', emissive: ENERGY, emissiveIntensity: 3 }),
@@ -722,10 +722,6 @@ export function buildIronFang(texSize: number): CharacterModel {
       p.rotation.z = sx * -(0.35 + i * 0.12);
       addTo(B[`upperArm${side}`], p);
     }
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.01, 6, 24, Math.PI), mats.trim);
-    rim.position.set(sx * 0.02, 0.05, 0);
-    rim.rotation.set(0, Math.PI / 2, sx * -0.35 + Math.PI / 2);
-    addTo(B[`upperArm${side}`], rim);
     // Gauntlet cuff + knuckle plate.
     const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.064, 0.07, 16), mats.trim);
     cuff.position.y = -0.03;
@@ -749,21 +745,16 @@ export function buildIronFang(texSize: number): CharacterModel {
     boot.position.y = -0.36;
     addTo(B[`shin${side}`], boot);
   }
-  // Fur collar.
-  const furGeo: THREE.BufferGeometry[] = [];
-  for (let i = 0; i < 26; i++) {
-    const a = (i / 26) * Math.PI * 2;
-    const c = new THREE.ConeGeometry(0.035, 0.11, 5);
-    c.rotateX(Math.PI / 2 + 0.6);
-    c.rotateY(a + Math.PI / 2);
-    c.translate(Math.cos(a) * 0.16, 0.19 + Math.sin(i * 7.1) * 0.01, Math.sin(a) * 0.12 - 0.01);
-    furGeo.push(c.toNonIndexed());
-  }
-  const fur = new THREE.Mesh(
-    mergeGeometries(furGeo),
-    makeMaterial({ color: '#2a2018', kind: 'fabric', repeat: 3, sheen: '#6a5642', roughness: 1 }, texSize),
-  );
-  addTo(B.chest, fur);
+  // Padded gorget collar.
+  const collarMat = makeMaterial({ color: '#2a2420', kind: 'leather', repeat: 3, roughness: 0.85 }, texSize);
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.045, 10, 32), collarMat);
+  collar.rotation.x = Math.PI / 2;
+  collar.scale.set(1.15, 1, 1);
+  collar.position.set(0, 0.2, -0.005);
+  addTo(B.chest, collar);
+  const gorget = new THREE.Mesh(thick(shell(0.17, 0.08, 0.15, [0, Math.PI * 2], [Math.PI * 0.3, Math.PI * 0.2], 24), 0.008), mats.armor);
+  gorget.position.set(0, 0.19, -0.005);
+  addTo(B.chest, gorget);
 
   const root = new THREE.Group();
   root.add(mesh);
@@ -775,8 +766,40 @@ export function buildIronFang(texSize: number): CharacterModel {
   backT.addCollider(B.thighL, v(0, -0.12, -0.02), 0.13).addCollider(B.thighR, v(0, -0.12, -0.02), 0.13);
   ribbons.push(front, backT);
 
-  const all = [...(Object.values(mats) as THREE.MeshStandardMaterial[]), fur.material as THREE.MeshStandardMaterial];
+  const all = [...(Object.values(mats) as THREE.MeshStandardMaterial[]), collarMat];
   return { id: 'ironfang', root, skel: s, mesh, ribbons, energy: ENERGY, glowMats: [mats.glow], materials: all };
+}
+
+/**
+ * Merge rigid accessory meshes that share a bone and material into a single
+ * draw call (armour plates, straps, buckles...). Cuts per-pass draw calls a lot.
+ */
+function mergeAccessories(skel: Skeleton): void {
+  for (const bone of skel.list) {
+    const groups = new Map<THREE.Material, THREE.Mesh[]>();
+    for (const c of bone.children) {
+      if (!(c instanceof THREE.Mesh) || c instanceof THREE.SkinnedMesh || Array.isArray(c.material)) continue;
+      const arr = groups.get(c.material) ?? [];
+      arr.push(c);
+      groups.set(c.material, arr);
+    }
+    for (const [mat, meshes] of groups) {
+      if (meshes.length < 2) continue;
+      const geos = meshes.map((m) => {
+        m.updateMatrix();
+        const g = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrix);
+        g.deleteAttribute('uv');
+        return g;
+      });
+      const merged = mergeGeometries(geos);
+      if (!merged) continue;
+      for (const m of meshes) bone.remove(m);
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.castShadow = meshes.some((m) => m.castShadow);
+      mesh.receiveShadow = true;
+      bone.add(mesh);
+    }
+  }
 }
 
 /** Alternate costume colours (mirror matches use these for player 2). */
@@ -787,6 +810,7 @@ const ALT: Record<CharacterId, { energy: string; colors: Record<string, string> 
 
 export function buildCharacter(id: CharacterId, texSize: number, alt = false): CharacterModel {
   const m = id === 'phantom' ? buildPhantom(texSize) : buildIronFang(texSize);
+  mergeAccessories(m.skel);
   if (alt) {
     const a = ALT[id];
     m.energy = new THREE.Color(a.energy);

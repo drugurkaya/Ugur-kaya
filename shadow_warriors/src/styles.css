@@ -300,7 +300,7 @@ body {
   color: var(--dim);
 }
 .sel-side {
-  width: min(380px, 40vw);
+  width: min(360px, 30vw);
   padding: 20px 24px;
   background: var(--panel);
   border: 1px solid var(--line);
