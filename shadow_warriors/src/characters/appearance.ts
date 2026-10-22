@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { CharacterId } from '../combat/data';
 import { detailSet, type PBRSet } from '../render/textures';
+import type { CustomProfile } from './profile';
 import { Ribbon } from './Ribbon';
 import { BodyBuilder, heightWeights, Skeleton, type BoneName, type ProfileKey, type Proportions } from './Rig';
 
@@ -284,8 +285,8 @@ function sculptBody(
 }
 
 /** Head shape: deformed sphere (skull, jaw, brow) weighted to head/neck. */
-function headGeometry(r: number, cy: number): THREE.BufferGeometry {
-  const g = new THREE.SphereGeometry(r, 32, 24);
+function headGeometry(r: number, cy: number, phi: [number, number] = [0, Math.PI * 2], theta: [number, number] = [0, Math.PI]): THREE.BufferGeometry {
+  const g = new THREE.SphereGeometry(r, 32, 24, phi[0], phi[1], theta[0], theta[1]);
   const p = g.getAttribute('position');
   const t = new THREE.Vector3();
   for (let i = 0; i < p.count; i++) {
@@ -821,4 +822,214 @@ export function buildCharacter(id: CharacterId, texSize: number, alt = false): C
     for (const g of m.glowMats) g.emissive.copy(m.energy);
   }
   return m;
+}
+
+/* ======================================================================== */
+/* CUSTOM FIGHTER ("SEN")                                                    */
+/* ======================================================================== */
+
+const scaleProfile = (keys: ProfileKey[], kx: number, kz: number): ProfileKey[] => keys.map(([t, x, f, b]) => [t, x * kx, f * kz, b * kz]);
+
+/**
+ * The player's own fighter: a body sculpted from the player's build and height,
+ * their photo mapped onto the face, and clothing/skin/hair colours picked from
+ * their photo. Uses the chosen fighting style's move set and animations.
+ */
+export function buildCustom(p: CustomProfile, texSize: number, alt = false): CharacterModel {
+  const b = Math.min(1.3, Math.max(0.85, p.build));
+  const props: Proportions = { ...PHANTOM_PROPS, shoulderX: 0.165 + (b - 1) * 0.12, hipX: 0.095 + (b - 1) * 0.04 };
+  const s = new Skeleton(props);
+  const bb = new BodyBuilder(s);
+  const W = s.bindWorld;
+  const ENERGY = new THREE.Color(p.style === 'ironfang' ? '#ff6a1f' : '#8a6bff');
+  if (alt) ENERGY.set(p.style === 'ironfang' ? '#ffcf3a' : '#ff3d5e');
+
+  const faceTex = p.face ? new THREE.TextureLoader().load(p.face) : null;
+  if (faceTex) faceTex.colorSpace = THREE.SRGBColorSpace;
+  const mats = {
+    skin: makeMaterial({ color: p.skin, kind: 'skin', repeat: 2, roughness: 0.6, normalScale: 0.2 }, texSize),
+    top: makeMaterial({ color: p.top, kind: 'fabric', repeat: 6, sheen: '#ffffff' }, texSize),
+    pants: makeMaterial({ color: p.pants, kind: 'fabric', repeat: 6, sheen: '#ffffff' }, texSize),
+    shoes: makeMaterial({ color: p.shoes, kind: 'leather', repeat: 4, roughness: 0.7, clearcoat: 0.2 }, texSize),
+    hair: makeMaterial({ color: p.hair, kind: 'fabric', repeat: 10, roughness: 0.8, sheen: p.hair, side: THREE.DoubleSide }, texSize),
+    face: new THREE.MeshStandardMaterial({
+      map: faceTex,
+      color: '#ffffff',
+      roughness: 0.62,
+      transparent: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+      visible: !!faceTex,
+    }),
+  };
+  (mats.top.sheenColor as THREE.Color).set(p.top).multiplyScalar(1.6);
+  (mats.pants.sheenColor as THREE.Color).set(p.pants).multiplyScalar(1.6);
+  for (const [k, m] of Object.entries(mats)) m.name = k;
+
+  sculptBody(
+    bb,
+    s,
+    {
+      torsoY: [0.84, 1.52],
+      torso: scaleProfile(
+        [
+          [0, 0.14, 0.1, 0.11],
+          [0.12, 0.165, 0.11, 0.13],
+          [0.3, 0.14, 0.1, 0.095],
+          [0.55, 0.162, 0.118, 0.105],
+          [0.74, 0.182, 0.13, 0.115],
+          [0.88, 0.18, 0.1, 0.105],
+          [1, 0.075, 0.065, 0.07],
+        ],
+        b,
+        0.2 + b * 0.8,
+      ),
+      neckR: 0.052 * (0.3 + b * 0.7),
+      upperArm: scaleProfile(
+        [
+          [0, 0.058, 0.06, 0.056],
+          [0.25, 0.052, 0.058, 0.05],
+          [0.85, 0.042, 0.043, 0.042],
+          [1, 0.04, 0.04, 0.04],
+        ],
+        b,
+        b,
+      ),
+      foreArm: scaleProfile(
+        [
+          [0, 0.042, 0.044, 0.042],
+          [0.25, 0.046, 0.046, 0.043],
+          [1, 0.032, 0.03, 0.03],
+        ],
+        b,
+        b,
+      ),
+      thigh: scaleProfile(
+        [
+          [0, 0.1, 0.1, 0.11],
+          [0.3, 0.092, 0.095, 0.095],
+          [0.85, 0.07, 0.07, 0.07],
+          [1, 0.068, 0.068, 0.068],
+        ],
+        b,
+        b,
+      ),
+      shin: scaleProfile(
+        [
+          [0, 0.07, 0.07, 0.07],
+          [0.35, 0.078, 0.075, 0.08],
+          [0.7, 0.06, 0.055, 0.058],
+          [1, 0.04, 0.038, 0.04],
+        ],
+        b,
+        b,
+      ),
+      hand: [0.043 * b, 0.048 * b, 0.095],
+      foot: [0.19, 0.046 * b],
+    },
+    {
+      torso: 'top',
+      neck: 'skin',
+      upperArm: p.sleeves ? 'top' : 'skin',
+      foreArm: p.sleeves ? 'top' : 'skin',
+      hand: 'skin',
+      thigh: 'pants',
+      shin: 'pants',
+      foot: 'shoes',
+    },
+  );
+  // Trousers up to the waist, over the bottom of the shirt.
+  bb.tube({
+    material: 'pants',
+    from: v(0, 0.82, 0),
+    to: v(0, W.hips.y + 0.07, 0),
+    profile: scaleProfile(
+      [
+        [0, 0.15, 0.106, 0.118],
+        [0.3, 0.172, 0.116, 0.136],
+        [0.75, 0.16, 0.11, 0.115],
+        [1, 0.15, 0.108, 0.104],
+      ],
+      b,
+      0.2 + b * 0.8,
+    ),
+    bone: 'hips',
+    weights: heightWeights([
+      [W.hips.y - 0.04, 'hips'],
+      [W.spine.y + 0.04, 'spine'],
+    ]),
+    radial: 28,
+    rings: 8,
+    caps: [0.5, 0],
+  });
+  if (!p.sleeves) {
+    // Short sleeves over the upper arm.
+    for (const side of ['L', 'R'] as const) {
+      const sh = W[`upperArm${side}`];
+      bb.tube({
+        material: 'top',
+        from: v(sh.x, sh.y + 0.04, sh.z),
+        to: v(sh.x, sh.y - 0.12, sh.z),
+        profile: [
+          [0, 0.066 * b, 0.068 * b, 0.064 * b],
+          [1, 0.06 * b, 0.064 * b, 0.058 * b],
+        ],
+        bone: `upperArm${side}` as BoneName,
+        parentBlend: [`clav${side}` as BoneName, 0.3],
+        radial: 18,
+        rings: 4,
+        caps: [0.6, 0.15],
+      });
+    }
+  }
+
+  // Head, photo face and hair.
+  const headCY = W.head.y + 0.1;
+  const r = 0.104;
+  bb.geometry('skin', headGeometry(r, headCY), () => [['head', 1]]);
+  if (faceTex) {
+    const plate = headGeometry(r, headCY, [Math.PI / 2 - 1.0, 2.0], [Math.PI * 0.2, Math.PI * 0.56]);
+    // Lift the plate just above the skin and project the photo planarly from the front.
+    const pos = plate.getAttribute('position');
+    const uv = plate.getAttribute('uv');
+    const c = new THREE.Vector3(0, headCY, 0.005);
+    const t = new THREE.Vector3();
+    plate.computeBoundingBox();
+    const bbx = plate.boundingBox!;
+    for (let i = 0; i < pos.count; i++) {
+      t.fromBufferAttribute(pos, i).sub(c).multiplyScalar(1.025).add(c);
+      pos.setXYZ(i, t.x, t.y, t.z);
+      uv.setXY(i, (t.x - bbx.min.x) / (bbx.max.x - bbx.min.x), (t.y - bbx.min.y) / (bbx.max.y - bbx.min.y));
+    }
+    bb.geometry('face', plate, () => [['head', 1]]);
+  }
+  if (p.hairStyle !== 'bald') {
+    const cap = thick(shell(0.112, 0.128, 0.122, [0, Math.PI * 2], [0, Math.PI * 0.3], 28), 0.006);
+    cap.translate(0, headCY + 0.012, -0.004);
+    bb.geometry('hair', cap, () => [['head', 1]]);
+    const back = thick(shell(0.114, 0.13, 0.124, [Math.PI / 2 + 0.95, Math.PI * 2 - 1.9], [Math.PI * 0.25, Math.PI * (p.hairStyle === 'long' ? 0.45 : 0.32)], 24), 0.006);
+    back.translate(0, headCY + 0.008, -0.004);
+    bb.geometry('hair', back, () => [['head', 1]]);
+  }
+
+  const mesh = bb.build({ skin: mats.skin, top: mats.top, pants: mats.pants, shoes: mats.shoes, hair: mats.hair, face: mats.face });
+  const root = new THREE.Group();
+  root.add(mesh);
+  const ribbons: Ribbon[] = [];
+  if (p.hairStyle === 'long') {
+    const tail = new Ribbon(s.bones.head, v(0, 0.06, -0.11), v(1, 0, 0), v(0, -1, -0.2), 0.32, 0.14, mats.hair, 7, 0.6, 0.3);
+    tail.addCollider(s.bones.chest, v(0, 0.1, -0.02), 0.17);
+    ribbons.push(tail);
+  }
+  return {
+    id: p.style,
+    root,
+    skel: s,
+    mesh,
+    ribbons,
+    energy: ENERGY,
+    glowMats: [],
+    materials: Object.values(mats) as THREE.MeshStandardMaterial[],
+  };
 }

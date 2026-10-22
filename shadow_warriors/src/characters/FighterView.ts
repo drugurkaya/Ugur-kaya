@@ -160,6 +160,27 @@ export class FighterView {
     scene.remove(this.group, this.blob);
     for (const r of this.model.ribbons) scene.remove(r.mesh);
     for (const g of this.ghosts) scene.remove(g.mesh, g.depth);
+    // Free GPU resources (custom fighters are rebuilt while editing).
+    const mats = new Set<THREE.Material>();
+    const geos = new Set<THREE.BufferGeometry>();
+    const collect = (o: THREE.Object3D) =>
+      o.traverse((c) => {
+        const m = c as THREE.Mesh;
+        if (!m.isMesh) return;
+        geos.add(m.geometry);
+        for (const mm of Array.isArray(m.material) ? m.material : [m.material]) mats.add(mm);
+      });
+    collect(this.group);
+    for (const r of this.model.ribbons) collect(r.mesh);
+    for (const g of this.ghosts) {
+      collect(g.mesh);
+      collect(g.depth);
+    }
+    for (const g of geos) g.dispose();
+    for (const m of mats) {
+      for (const v of Object.values(m)) if (v instanceof THREE.Texture) v.dispose();
+      m.dispose();
+    }
   }
 
   hitFlash(color: THREE.Color, strength: number): void {

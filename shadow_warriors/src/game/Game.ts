@@ -1,9 +1,12 @@
 import * as THREE from 'three';
 import { AIController, type Difficulty } from '../ai/AIController';
 import { Audio, type HitSize } from '../audio/Audio';
-import { buildCharacter } from '../characters/appearance';
+import { buildCharacter, buildCustom } from '../characters/appearance';
+import { loadProfile, saveProfile, type CustomProfile } from '../characters/profile';
 import { FighterView } from '../characters/FighterView';
 import { CHARACTERS, type CharacterId } from '../combat/data';
+import type { CharacterDef } from '../combat/types';
+import { Creator } from '../ui/Creator';
 import { Fighter, FPS } from '../combat/Fighter';
 import { Match, type MatchPhase } from '../combat/Match';
 import { BUTTONS, type Button, type FighterInput, type MatchEvent } from '../combat/types';
@@ -21,6 +24,9 @@ type Screen = 'loading' | 'menu' | 'match';
 const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
 const STEP = 1 / FPS;
 const CHAR_IDS: CharacterId[] = ['phantom', 'ironfang'];
+/** Selectable fighters: the two built-ins plus the player's own ("custom"). */
+type FighterId = CharacterId | 'custom';
+const FIGHTER_IDS: FighterId[] = ['phantom', 'ironfang', 'custom'];
 
 /**
  * Top-level orchestrator: loading, menus, match lifecycle, fixed-step
@@ -37,7 +43,13 @@ export class Game {
   private renderer!: Renderer;
   private arena!: Arena;
   private vfx!: VFX;
-  private views: Record<CharacterId, FighterView>[] = [];
+  private views: Partial<Record<FighterId, FighterView>>[] = [];
+  private custom: CustomProfile | null = loadProfile();
+  private customVersion = 0;
+  private customBuilt: number[] = [-1, -1];
+  private texSize = 512;
+  private creator!: Creator;
+  private creatorReturn: 'main' | 'select' = 'main';
   private active: [FighterView, FighterView] | null = null;
   private dummies: [Fighter, Fighter];
   match: Match | null = null;
@@ -59,8 +71,8 @@ export class Game {
   private auraTimer = 0;
   private selectSide = 0;
   private selectReady = [false, false];
-  p1: CharacterId = 'phantom';
-  p2: CharacterId = 'ironfang';
+  p1: FighterId = 'phantom';
+  p2: FighterId = 'ironfang';
   private menuTime = 0;
   private debugGroup = new THREE.Group();
   private debugSpheres: THREE.Mesh[] = [];
@@ -111,6 +123,8 @@ export class Game {
       this.renderer = new Renderer(this.canvas, this.scene, this.cam.camera);
       const q = this.settings.data.quality;
       const texSize = q === 'low' ? 256 : q === 'medium' ? 512 : 1024;
+      this.texSize = Math.min(512, texSize);
+      if (this.custom) this.p1 = 'custom';
       this.ui.setLoading(0.1, 'Tapınak inşa ediliyor');
       await nextFrame();
       this.arena = new Arena(this.scene, this.renderer.webgl, texSize, (p) => this.ui.setLoading(0.1 + p * 0.4, 'Tapınak inşa ediliyor'));
@@ -118,13 +132,14 @@ export class Game {
       this.scene.add(this.debugGroup);
       let k = 0;
       for (const slot of [0, 1]) {
-        const rec = {} as Record<CharacterId, FighterView>;
+        const rec: Partial<Record<FighterId, FighterView>> = {};
         for (const id of CHAR_IDS) {
           this.ui.setLoading(0.5 + k * 0.1, `Savaşçılar hazırlanıyor: ${CHARACTERS[id].name}`);
           await nextFrame();
           const model = buildCharacter(id, Math.min(512, texSize), slot === 1);
-          rec[id] = new FighterView(model, CHARACTERS[id].scale, this.scene);
-          rec[id].setVisible(false);
+          const view = new FighterView(model, CHARACTERS[id].scale, this.scene);
+          view.setVisible(false);
+          rec[id] = view;
           k++;
         }
         this.views.push(rec);
@@ -149,6 +164,70 @@ export class Game {
     }
   }
 
+  /* ====================================================== Custom fighter */
+
+  /** Combat definition for a fighter id (the custom fighter borrows its style's move set). */
+  defOf(id: FighterId): CharacterDef {
+    if (id !== 'custom') return CHARACTERS[id];
+    const p = this.custom;
+    const base = CHARACTERS[p?.style ?? 'phantom'];
+    return {
+      ...base,
+      name: (p?.name || 'SEN').toUpperCase(),
+      title: p ? (p.style === 'ironfang' ? 'Güçlü stil' : 'Hızlı stil') : 'Henüz oluşturulmadı',
+      description: p ? 'Senin savaşçın. Fotoğrafından oluşturuldu.' : 'Enter ile fotoğrafından kendi savaşçını oluştur.',
+      scale: base.scale * (p?.height ?? 1),
+    };
+  }
+
+  /** View for a fighter in a slot; the custom one is (re)built when its profile changes. */
+  private viewOf(slot: number, id: FighterId): FighterView {
+    const rec = this.views[slot];
+    if (id === 'custom' && this.customBuilt[slot] !== this.customVersion) {
+      rec.custom?.dispose(this.scene);
+      const prof = this.custom ?? loadProfile() ?? undefined;
+      const model = prof ? buildCustom(prof, this.texSize, slot === 1) : buildCharacter('phantom', this.texSize, slot === 1);
+      rec.custom = new FighterView(model, this.defOf('custom').scale, this.scene);
+      rec.custom.setVisible(false);
+      this.customBuilt[slot] = this.customVersion;
+    }
+    return rec[id]!;
+  }
+
+  private hideAllViews(): void {
+    for (const rec of this.views) for (const v of Object.values(rec)) v?.setVisible(false);
+  }
+
+  private openCreator(returnTo: 'main' | 'select'): void {
+    this.creatorReturn = returnTo;
+    this.ui.show('creator');
+    this.creator.open(this.custom);
+  }
+
+  private previewCustom(p: CustomProfile): void {
+    this.custom = p;
+    this.customVersion++;
+    this.hideAllViews();
+    const v = this.viewOf(0, 'custom');
+    v.setVisible(true);
+    const d = new Fighter(this.defOf('custom'), 0);
+    d.resetForRound({ x: 0.9, z: 0.4 }, -0.25, true);
+    this.dummies = [d, this.dummies[1]];
+    this.active = [v, v];
+    v.reset(d);
+  }
+
+  private closeCreator(): void {
+    this.custom = loadProfile();
+    this.customVersion++;
+    if (!this.custom) {
+      if (this.p1 === 'custom') this.p1 = 'phantom';
+      if (this.p2 === 'custom') this.p2 = 'ironfang';
+    }
+    if (this.creatorReturn === 'select') this.openSelect();
+    else this.goMainMenu();
+  }
+
   /* ================================================================ Menus */
 
   private buildMenus(): void {
@@ -159,6 +238,7 @@ export class Game {
       items: [
         { kind: 'button', label: 'Oyunu Başlat', onSelect: () => this.openSelect() },
         { kind: 'button', label: 'Karakter Seçimi', onSelect: () => this.openSelect() },
+        { kind: 'button', label: 'Karakterini Oluştur', onSelect: () => this.openCreator('main') },
         { kind: 'button', label: 'Zorluk Seviyesi', onSelect: () => this.openDifficulty(false) },
         { kind: 'button', label: 'Kontroller', onSelect: () => this.ui.push('controls') },
         { kind: 'button', label: 'Grafik Ayarları', onSelect: () => this.ui.push('graphics') },
@@ -290,6 +370,24 @@ export class Game {
     }));
 
     this.buildSelectScreen();
+
+    this.creator = new Creator({
+      preview: (p) => this.previewCustom(p),
+      save: (p) => {
+        if (!saveProfile(p)) return false;
+        this.p1 = 'custom';
+        this.closeCreator();
+        return true;
+      },
+      cancel: () => this.closeCreator(),
+      deleted: () => this.closeCreator(),
+    });
+    this.ui.defineCustom('creator', this.creator.el, {
+      onNav: (a) => {
+        if (a === 'back') this.closeCreator();
+        return true;
+      },
+    });
   }
 
   private difficultyStartsMatch = false;
@@ -370,15 +468,21 @@ export class Game {
 
   private cycleChar(side: number, d: number): void {
     const cur = side === 0 ? this.p1 : this.p2;
-    const idx = (CHAR_IDS.indexOf(cur) + d + CHAR_IDS.length) % CHAR_IDS.length;
-    if (side === 0) this.p1 = CHAR_IDS[idx];
-    else this.p2 = CHAR_IDS[idx];
+    const idx = (FIGHTER_IDS.indexOf(cur) + d + FIGHTER_IDS.length) % FIGHTER_IDS.length;
+    if (side === 0) this.p1 = FIGHTER_IDS[idx];
+    else this.p2 = FIGHTER_IDS[idx];
     this.audio.menuMove();
     this.showMenuFighters();
     this.renderSelect();
   }
 
   private selectConfirm(): void {
+    const chosen = this.selectSide === 0 ? this.p1 : this.p2;
+    if (chosen === 'custom' && !this.custom) {
+      this.audio.menuSelect();
+      this.openCreator('select');
+      return;
+    }
     this.audio.menuSelect();
     this.selectReady[this.selectSide] = true;
     const d = this.dummies[this.selectSide];
@@ -396,9 +500,9 @@ export class Game {
   private renderSelect(): void {
     const ids = [this.p1, this.p2];
     this.selectEl.querySelectorAll<HTMLElement>('.sel-side').forEach((p, i) => {
-      const def = CHARACTERS[ids[i]];
+      const def = this.defOf(ids[i]);
       p.classList.toggle('active', i === this.selectSide);
-      p.classList.toggle('ph', ids[i] === 'phantom');
+      p.classList.toggle('ph', def.id === 'phantom');
       p.querySelector('.n')!.textContent = def.name;
       p.querySelector('.tag')!.textContent = def.title;
       p.querySelector('.desc')!.textContent = def.description;
@@ -433,12 +537,12 @@ export class Game {
   /** Place the two preview fighters for menu / character select. */
   private showMenuFighters(): void {
     if (!this.views.length || this.screen === 'match') return;
-    for (const rec of this.views) for (const id of CHAR_IDS) rec[id].setVisible(false);
-    const a = this.views[0][this.p1];
-    const b = this.views[1][this.p2];
+    this.hideAllViews();
+    const a = this.viewOf(0, this.p1);
+    const b = this.viewOf(1, this.p2);
     a.setVisible(true);
     b.setVisible(true);
-    this.dummies = [new Fighter(CHARACTERS[this.p1], 0), new Fighter(CHARACTERS[this.p2], 1)];
+    this.dummies = [new Fighter(this.defOf(this.p1), 0), new Fighter(this.defOf(this.p2), 1)];
     this.dummies[0].resetForRound({ x: -1.0, z: 0.3 }, 0.45, true);
     this.dummies[1].resetForRound({ x: 1.0, z: 0.3 }, -0.45, true);
     this.dummyTimers = [0, 0];
@@ -454,10 +558,10 @@ export class Game {
     this.ui.closeAll();
     this.screen = 'match';
     this.paused = false;
-    this.match = new Match(CHARACTERS[this.p1], CHARACTERS[this.p2]);
+    this.match = new Match(this.defOf(this.p1), this.defOf(this.p2));
     this.ai = new AIController(this.settings.data.difficulty, (Math.random() * 1e9) | 0);
-    for (const rec of this.views) for (const id of CHAR_IDS) rec[id].setVisible(false);
-    this.active = [this.views[0][this.p1], this.views[1][this.p2]];
+    this.hideAllViews();
+    this.active = [this.viewOf(0, this.p1), this.viewOf(1, this.p2)];
     this.active.forEach((v, i) => {
       v.setVisible(true);
       v.reset(this.match!.fighters[i]);
@@ -469,7 +573,7 @@ export class Game {
     this.lastPhase = null;
     this.resultsShown = false;
     this.input.flush();
-    this.ui.hud.setFighters(this.p1, this.p2, ['OYUNCU 1', `CPU · ${({ easy: 'KOLAY', normal: 'NORMAL', hard: 'ZOR' } as const)[this.settings.data.difficulty]}`]);
+    this.ui.hud.setFighters(this.defOf(this.p1), this.defOf(this.p2), ['OYUNCU 1', `CPU · ${({ easy: 'KOLAY', normal: 'NORMAL', hard: 'ZOR' } as const)[this.settings.data.difficulty]}`]);
     this.ui.hud.setVisible(true);
     this.ui.hud.setBarsVisible(false);
     this.ui.hud.clearAnnounce();
@@ -504,7 +608,7 @@ export class Game {
     const w = m.matchWinner;
     const playerWon = w === 0;
     const el = document.createElement('div');
-    const name = w < 0 ? 'BERABERE' : CHARACTERS[w === 0 ? this.p1 : this.p2].name;
+    const name = w < 0 ? 'BERABERE' : this.defOf(w === 0 ? this.p1 : this.p2).name;
     el.innerHTML = `
       <div>
         <div class="winner"><small>${w < 0 ? 'SONUÇ' : playerWon ? 'ZAFER · KAZANAN' : 'YENİLGİ · KAZANAN'}</small>${name}</div>
@@ -593,6 +697,17 @@ export class Game {
   private updateMenu(dt: number): void {
     this.menuTime += dt;
     if (!this.active) return;
+    if (this.ui.topName === 'creator') {
+      // Turntable preview of the player's own fighter.
+      const d = this.dummies[0];
+      d.prevYaw = d.yaw = -0.35 + Math.sin(this.menuTime * 0.5) * 0.45;
+      this.active[0].update(d, 0, dt, false);
+      this.cam.mode = 'manual';
+      this.cam.manualPos.set(0.15, 1.35, 3.5);
+      this.cam.manualTarget.set(0.45, 1.0, 0.4);
+      this.cam.update(dt, { x: d.pos.x, y: 0, z: d.pos.z, yaw: d.yaw }, { x: d.pos.x, y: 0, z: d.pos.z, yaw: d.yaw }, 0, 0);
+      return;
+    }
     const inSelect = this.ui.topName === 'select' || this.ui.topName === 'difficulty';
     this.dummies.forEach((d, i) => {
       if (d.state === 'victory') {
@@ -770,7 +885,7 @@ export class Game {
     if ((m.phase === 'ko' || m.phase === 'timeup') && m.phaseFrame === 95) this.cam.mode = 'victory';
     if (m.phase === 'matchEnd' && m.phaseFrame === 1) {
       const w = m.matchWinner;
-      hud.announce(w < 0 ? 'BERABERE' : w === 0 ? 'ZAFER' : 'YENİLGİ', w < 0 ? '' : `${CHARACTERS[w === 0 ? this.p1 : this.p2].name} KAZANDI`, 'hold', w === 0);
+      hud.announce(w < 0 ? 'BERABERE' : w === 0 ? 'ZAFER' : 'YENİLGİ', w < 0 ? '' : `${this.defOf(w === 0 ? this.p1 : this.p2).name} KAZANDI`, 'hold', w === 0);
       this.audio.stopMusic();
     }
   }
@@ -941,7 +1056,7 @@ export class Game {
   /* ========================================================== Test hooks */
 
   /** Start a match directly (used by automated browser tests). */
-  quickMatch(p1: CharacterId, p2: CharacterId, difficulty: Difficulty, skipIntro = true): void {
+  quickMatch(p1: FighterId, p2: FighterId, difficulty: Difficulty, skipIntro = true): void {
     this.p1 = p1;
     this.p2 = p2;
     this.settings.update({ difficulty });

@@ -1,5 +1,6 @@
 import type { Audio } from '../audio/Audio';
-import { CHARACTERS, ROUNDS_TO_WIN, type CharacterId } from '../combat/data';
+import { ROUNDS_TO_WIN } from '../combat/data';
+import type { CharacterDef } from '../combat/types';
 import type { Match } from '../combat/Match';
 import { keyLabel, type Input } from '../core/Input';
 import type { Action, Settings } from '../core/Settings';
@@ -426,12 +427,11 @@ export class HUD {
     this.skip.style.display = v ? 'block' : 'none';
   }
 
-  setFighters(a: CharacterId, b: CharacterId, labels: [string, string]): void {
-    const ids = [a, b];
-    ids.forEach((id, i) => {
-      this.names[i].textContent = CHARACTERS[id].name;
+  setFighters(a: CharacterDef, b: CharacterDef, labels: [string, string]): void {
+    [a, b].forEach((def, i) => {
+      this.names[i].textContent = def.name;
       this.tags[i].textContent = labels[i];
-      this.meterWrap[i].style.setProperty('--c', id === 'phantom' ? 'var(--phantom)' : 'var(--fang)');
+      this.meterWrap[i].style.setProperty('--c', def.id === 'phantom' ? 'var(--phantom)' : 'var(--fang)');
     });
     this.lastHp = [1, 1];
     this.comboTimer = [0, 0];

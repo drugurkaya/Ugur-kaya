@@ -67,6 +67,24 @@ Zincirler yalnızca önceki vuruş **isabet ettiğinde veya bloklandığında** 
 
 İsimli bir kombo tamamlanınca son vuruş %15 bonus hasar verir.
 
+## Kendi karakterin ("SEN")
+
+Ana menü → **Karakterini Oluştur**:
+
+1. **Fotoğraf seç:** tercihen yüzünün ve kıyafetinin göründüğü, iyi ışıklı tam boy bir fotoğraf.
+2. **Yüz çerçevesi:** fotoğrafta yüzüne tıkla/sürükle, boyutu kaydırıcı veya fare tekerleğiyle ayarla.
+   Yüz, 3D karakterin kafasına giydirilir.
+3. **Renkler:** Ten / Saç / Üst / Alt / Ayakkabı düğmesini seçip fotoğrafta o yere tıkla
+   (ya da düğmedeki renk kutusundan elle seç).
+4. **Boy, yapı, saç, kol boyu ve dövüş stili** (Hızlı = Phantom hareketleri, Güçlü = Iron Fang hareketleri).
+5. **Kaydet:** karakter seçiminde "SEN" (isminle) olarak çıkar; HUD'da adın görünür.
+
+Fotoğraf ve karakter yalnızca **o bilgisayardaki tarayıcıda** (localStorage) saklanır; GitHub'a veya
+başka bir sunucuya gönderilmez. Başka bir bilgisayarda/tarayıcıda yeniden oluşturmak gerekir. "Sil" ile kaldırılır.
+
+**Sınır:** tek fotoğraftan gerçek 3D vücut taraması yapılmaz. Vücut, seçtiğin boy/yapı ve fotoğraftan alınan
+renklerle şekillenen genel bir modeldir; yüz düz bir fotoğraf olarak kafaya giydirilir (yandan bakınca düzleşir).
+
 ## Teknoloji ve mimari
 
 | Katman | Seçim | Not |
@@ -102,7 +120,8 @@ shadow_warriors/
 │   ├── ai/AIController.ts     Durum makineli yapay zekâ, 3 zorluk profili
 │   ├── characters/
 │   │   ├── Rig.ts             Prosedürel iskelet ve skinned gövde üretici
-│   │   ├── appearance.ts      The Phantom ve Iron Fang görünümleri, zırh, alternatif kostümler
+│   │   ├── appearance.ts      The Phantom, Iron Fang ve kendi karakterin (fotoğraflı) görünümleri
+│   │   ├── profile.ts         Kendi karakter profili: fotoğraf, yüz kırpma, renk örnekleme, kayıt
 │   │   ├── Pose.ts            Poz karıştırma ve iki kemikli bacak IK (ayak kayması önleme)
 │   │   ├── clips.ts           Elle anahtarlanmış animasyon klipleri
 │   │   ├── Animator.ts        Durum → klip seçimi, geçişler, adım uzunluğu eşlemeli yürüme
@@ -116,6 +135,7 @@ shadow_warriors/
 │   │   └── textures.ts        Prosedürel PBR dokular (taş, metal, kumaş, deri, cilt)
 │   ├── audio/Audio.ts         Prosedürel ses efektleri, ambiyans, müzik nabzı
 │   ├── ui/UI.ts               Menüler, ayarlar, karakter seçimi, HUD, anons, sonuç ekranı
+│   ├── ui/Creator.ts          Karakter oluşturucu ekranı
 │   └── core/                  Girdi (klavye/kumanda, tuş atama), ayarlar, matematik
 ├── tests/combat.test.ts       Savaş sistemi ve YZ testleri
 └── scripts/                   Uçtan uca test ve ekran görüntüsü araçları

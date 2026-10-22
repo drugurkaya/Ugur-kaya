@@ -215,8 +215,20 @@ await page.waitForTimeout(500);
 s = await state();
 check('pause → main menu', s.screen === 'main', s.screen);
 
-// Graphics settings: cycle quality presets and toggles.
-for (let i = 0; i < 4; i++) await key('ArrowDown', 30);
+// Character creator opens and closes.
+for (let i = 0; i < 2; i++) await key('ArrowDown', 30);
+await key('Enter');
+await page.waitForTimeout(500);
+s = await state();
+check('character creator opens', s.screen === 'creator', s.screen);
+await shot('15-creator');
+await key('Escape');
+await page.waitForTimeout(400);
+s = await state();
+check('creator closes back to main menu', s.screen === 'main', s.screen);
+
+// Graphics settings: cycle quality presets and toggles (menu focus stays on "Karakterini Oluştur").
+for (let i = 0; i < 3; i++) await key('ArrowDown', 30);
 await key('Enter');
 await page.waitForTimeout(300);
 s = await state();
