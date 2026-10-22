@@ -1,5 +1,5 @@
-# Depoyu statik olarak GitHub Pages'te yayınlar; Shadow Warriors (Vite projesi) derlenip
-# shadow_warriors/ klasörünün yerine konur.
+# Depoyu statik olarak GitHub Pages'te yayınlar; Shadow Warriors ve HEARTLINE (Vite projeleri)
+# derlenip kendi klasörlerinin yerine konur.
 name: GitHub Pages
 
 on:
@@ -28,9 +28,17 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: shadow_warriors/package-lock.json
+          cache-dependency-path: |
+            shadow_warriors/package-lock.json
+            heartline/package-lock.json
       - name: Build Shadow Warriors
         working-directory: shadow_warriors
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Build HEARTLINE
+        working-directory: heartline
         run: |
           npm ci
           npm test
@@ -39,9 +47,10 @@ jobs:
         run: |
           mkdir -p _site
           for f in *; do
-            if [ "$f" != "_site" ] && [ "$f" != "shadow_warriors" ]; then cp -r "$f" _site/; fi
+            if [ "$f" != "_site" ] && [ "$f" != "shadow_warriors" ] && [ "$f" != "heartline" ]; then cp -r "$f" _site/; fi
           done
           cp -r shadow_warriors/dist _site/shadow_warriors
+          cp -r heartline/dist _site/heartline
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -94,6 +94,28 @@ Klavye: W/A/S/D hareket, J/K yumruk, U/I tekme, L blok, Space kaçınma, O özel
 
 ---
 
+## 🫀 HEARTLINE: Bir Kalp Cerrahının Hayatı (3D anlatı oyunu)
+
+[`heartline/`](heartline/README.md): Bursa'da 50 yaşındaki kalp cerrahı Dr. Kemal Arslan'ın günü.
+Saat 05:12'de yoğun bakımdan gelen telefonla başlar: cevapla, bekle ya da reddet; telefonda talimat
+ver, evde hazırlan (her eylem dakika harcar, hasta beklemez), hastaneye git, yatak başında ve
+ameliyathanede karar ver, aileyle konuş. Gizli klinik neden (cerrahi kanama / koagülopati /
+tamponat), dakika dakika işleyen hasta modeli, stres–yorgunluk–ekip güveni–aile gibi oyunu
+gerçekten etkileyen değişkenler, gecikmeli sonuçlar, karakter hafızası, kanıta dayalı kurgusal
+inceleme/hukuk süreci ve altı farklı son. Türkçe/İngilizce, masaüstü ve dokunmatik, kayıt/yükleme.
+Three.js + TypeScript.
+
+```bash
+cd heartline
+npm install
+npm run dev
+```
+
+GitHub Pages'te `https://<kullanıcı-adı>.github.io/<depo>/heartline/` adresinden de açılır.
+Kurgusaldır; tıbbi ve hukuki içerik sadeleştirilmiştir, klinisyen/hukukçu denetiminden geçmemiştir.
+
+---
+
 ## 💳 Ödeme Takip (iPhone, sesli kayıt + yapay zekâ)
 
 [`odeme_takip/index.html`](odeme_takip/index.html): banka ödemeleri, kredi taksitleri, kredi kartı, fatura,
