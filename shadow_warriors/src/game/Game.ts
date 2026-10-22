@@ -3,6 +3,8 @@ import { AIController, type Difficulty } from '../ai/AIController';
 import { Audio, type HitSize } from '../audio/Audio';
 import { buildCharacter, buildCustom } from '../characters/appearance';
 import { loadProfile, saveProfile, type CustomProfile } from '../characters/profile';
+import { loadScan, type ScanData } from '../characters/scan';
+import { buildScanModel } from '../characters/scanRig';
 import { FighterView } from '../characters/FighterView';
 import { CHARACTERS, type CharacterId } from '../combat/data';
 import type { CharacterDef } from '../combat/types';
@@ -45,6 +47,7 @@ export class Game {
   private vfx!: VFX;
   private views: Partial<Record<FighterId, FighterView>>[] = [];
   private custom: CustomProfile | null = loadProfile();
+  private scan: ScanData | null = null;
   private customVersion = 0;
   private customBuilt: number[] = [-1, -1];
   private texSize = 512;
@@ -124,6 +127,7 @@ export class Game {
       const q = this.settings.data.quality;
       const texSize = q === 'low' ? 256 : q === 'medium' ? 512 : 1024;
       this.texSize = Math.min(512, texSize);
+      this.scan = await loadScan();
       if (this.custom) this.p1 = 'custom';
       this.ui.setLoading(0.1, 'Tapınak inşa ediliyor');
       await nextFrame();
@@ -186,7 +190,12 @@ export class Game {
     if (id === 'custom' && this.customBuilt[slot] !== this.customVersion) {
       rec.custom?.dispose(this.scene);
       const prof = this.custom ?? loadProfile() ?? undefined;
-      const model = prof ? buildCustom(prof, this.texSize, slot === 1) : buildCharacter('phantom', this.texSize, slot === 1);
+      const model =
+        prof && prof.useScan && this.scan
+          ? buildScanModel(this.scan, prof, slot === 1)
+          : prof
+            ? buildCustom(prof, this.texSize, slot === 1)
+            : buildCharacter('phantom', this.texSize, slot === 1);
       rec.custom = new FighterView(model, this.defOf('custom').scale, this.scene);
       rec.custom.setVisible(false);
       this.customBuilt[slot] = this.customVersion;
@@ -372,6 +381,10 @@ export class Game {
     this.buildSelectScreen();
 
     this.creator = new Creator({
+      getScan: () => this.scan,
+      setScan: (d) => {
+        this.scan = d;
+      },
       preview: (p) => this.previewCustom(p),
       save: (p) => {
         if (!saveProfile(p)) return false;

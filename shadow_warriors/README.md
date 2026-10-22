@@ -85,6 +85,24 @@ başka bir sunucuya gönderilmez. Başka bir bilgisayarda/tarayıcıda yeniden o
 **Sınır:** tek fotoğraftan gerçek 3D vücut taraması yapılmaz. Vücut, seçtiğin boy/yapı ve fotoğraftan alınan
 renklerle şekillenen genel bir modeldir; yüz düz bir fotoğraf olarak kafaya giydirilir (yandan bakınca düzleşir).
 
+### 3D tarama ile (gerçek vücudun)
+
+Bir 3D tarayıcınız varsa vücudunuzu doğrudan oyuna alabilirsiniz. **Karakterini Oluştur → 3D tarama yükle**:
+
+- **Desteklenen biçimler:** GLB/GLTF, OBJ (+ MTL + doku resimlerini **birlikte seçin**), PLY (renkli nokta/köşe
+  renkleri dahil), STL (renksiz), FBX. Draco ile sıkıştırılmış GLB desteklenmez; sıkıştırmasız dışa aktarın.
+- **Nasıl taranmalı:** ayakta, kollar gövdeden biraz açık (**A-poz** veya **T-poz**), bacaklar hafif ayrık, tek parça
+  ve kapalı (su geçirmez) bir model en iyi sonucu verir. Taban/zemin parçası varsa tarama yazılımında silin.
+- **Otomatik işlemler:** yukarı ekseni (Y veya Z) ve yönü bulur, ayakları zemine oturtur, birimi (m / cm / mm)
+  anlayıp **gerçek boyu** karaktere uygular, modeli ~40 bin üçgene sadeleştirir, iskeleti kol/bacak yönlerine göre
+  oturtur ve her noktayı en yakın kemiklere bağlar. Sonra tüm dövüş animasyonları taramanızla oynar.
+- Model yüzü bize dönük değilse **180° çevir**, yatık geldiyse **Yatır / kaldır** düğmesini kullanın.
+- Tarama, tarayıcının yerel veritabanında (IndexedDB) saklanır; hiçbir sunucuya gönderilmez.
+
+**Sınırlar:** iskelet ve ağırlıklar otomatiktir; profesyonel elle rig kalitesinde değildir. Kolların gövdeye
+değdiği taramalarda (kollar yanda) koltuk altı bölgesi bozulabilir. Taramadaki açık eller oyunda yumruk olmaz,
+açık el olarak kalır. Yüz ifadesi canlandırılmaz.
+
 ## Teknoloji ve mimari
 
 | Katman | Seçim | Not |
@@ -94,6 +112,7 @@ renklerle şekillenen genel bir modeldir; yüz düz bir fotoğraf olarak kafaya 
 | Post-processing | EffectComposer: MSAA, UnrealBloom, ACES ton eşleme, özel renk düzenleme geçişi | |
 | Fizik | Özel deterministik 60 Hz simülasyon | Bkz. aşağıdaki not |
 | Ses | Web Audio API | Tüm sesler gerçek zamanlı sentezlenir |
+| 3D tarama | three.js yükleyicileri + meshoptimizer | Sadeleştirme, IndexedDB'de saklama |
 | Test | Vitest (savaş/YZ), Playwright (uçtan uca) | |
 
 **Neden Rapier değil?** 1'e 1 dövüş oyununda kare (frame) hassasiyetinde, deterministik ve tekrarlanabilir
@@ -122,6 +141,8 @@ shadow_warriors/
 │   │   ├── Rig.ts             Prosedürel iskelet ve skinned gövde üretici
 │   │   ├── appearance.ts      The Phantom, Iron Fang ve kendi karakterin (fotoğraflı) görünümleri
 │   │   ├── profile.ts         Kendi karakter profili: fotoğraf, yüz kırpma, renk örnekleme, kayıt
+│   │   ├── scan.ts            3D tarama içe aktarma: okuma, yön/ölçek, sadeleştirme, IndexedDB
+│   │   ├── scanRig.ts         Taramaya otomatik iskelet oturtma ve ağırlıklandırma
 │   │   ├── Pose.ts            Poz karıştırma ve iki kemikli bacak IK (ayak kayması önleme)
 │   │   ├── clips.ts           Elle anahtarlanmış animasyon klipleri
 │   │   ├── Animator.ts        Durum → klip seçimi, geçişler, adım uzunluğu eşlemeli yürüme

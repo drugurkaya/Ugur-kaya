@@ -1,3 +1,4 @@
+import { deleteScan, importScan, rotateScan, saveScan, SCAN_HEIGHT, type ScanData } from '../characters/scan';
 import {
   defaultProfile,
   deleteProfile,
@@ -18,6 +19,8 @@ const SLOTS: { key: ColorSlot; label: string }[] = [
 ];
 
 export interface CreatorHooks {
+  getScan: () => ScanData | null;
+  setScan: (d: ScanData | null) => void;
   preview: (p: CustomProfile) => void;
   save: (p: CustomProfile) => boolean;
   cancel: () => void;
@@ -45,7 +48,17 @@ export class Creator {
     this.el.innerHTML = `
       <div class="panel cr-panel">
         <h2>KARAKTERİNİ OLUŞTUR<small>FOTOĞRAFIN SADECE BU TARAYICIDA SAKLANIR</small></h2>
-        <label class="cr-file">📷 Fotoğraf seç (tam boy önerilir)<input type="file" accept="image/*" /></label>
+        <div class="cr-scan">
+          <label class="cr-file">🧍 3D tarama yükle (GLB, OBJ+MTL+doku, PLY, STL, FBX)<input type="file" data-scan multiple accept=".glb,.gltf,.bin,.obj,.mtl,.ply,.stl,.fbx,image/*" /></label>
+          <div class="cr-scan-info"></div>
+          <div class="cr-scan-tools">
+            <label><input type="checkbox" data-usescan /> Taramayı kullan</label>
+            <button data-scan-act="y180">↻ 180° çevir</button>
+            <button data-scan-act="x90">⤾ Yatır / kaldır</button>
+            <button data-scan-act="del">Taramayı sil</button>
+          </div>
+        </div>
+        <label class="cr-file cr-photo-file">📷 Fotoğraf seç (tam boy önerilir)<input type="file" data-photo accept="image/*" /></label>
         <div class="cr-photo"><canvas width="360" height="360"></canvas><div class="cr-empty">Önce bir fotoğraf seçin.<br>Yüzünüzün ve kıyafetinizin göründüğü, iyi ışıklı bir fotoğraf en iyi sonucu verir.</div></div>
         <div class="cr-modes">
           <button data-mode="face" class="on">Yüz çerçevesi</button>
@@ -54,7 +67,7 @@ export class Creator {
         <div class="cr-hint"></div>
         <div class="cr-row"><span>Yüz boyutu</span><input type="range" data-k="faceR" min="0.04" max="0.45" step="0.005" /></div>
         <div class="cr-row"><span>İsim</span><input type="text" data-k="name" maxlength="14" /></div>
-        <div class="cr-row"><span>Boy</span><input type="range" data-k="height" min="0.92" max="1.08" step="0.01" /><b data-v="height"></b></div>
+        <div class="cr-row"><span>Boy</span><input type="range" data-k="height" min="0.85" max="1.15" step="0.01" /><b data-v="height"></b></div>
         <div class="cr-row"><span>Yapı</span><input type="range" data-k="build" min="0.85" max="1.3" step="0.01" /><b data-v="build"></b></div>
         <div class="cr-row"><span>Saç</span><select data-k="hairStyle"><option value="short">Kısa</option><option value="long">Uzun</option><option value="bald">Kel</option></select></div>
         <div class="cr-row"><span>Kollar</span><select data-k="sleeves"><option value="false">Kısa kollu</option><option value="true">Uzun kollu</option></select></div>
@@ -80,7 +93,8 @@ export class Creator {
   }
 
   private bind(): void {
-    const file = this.el.querySelector<HTMLInputElement>('input[type=file]')!;
+    this.bindScan();
+    const file = this.el.querySelector<HTMLInputElement>('input[data-photo]')!;
     file.addEventListener('change', async () => {
       const f = file.files?.[0];
       if (!f) return;
@@ -194,6 +208,52 @@ export class Creator {
     });
   }
 
+  private bindScan(): void {
+    const input = this.el.querySelector<HTMLInputElement>('input[data-scan]')!;
+    const use = this.el.querySelector<HTMLInputElement>('input[data-usescan]')!;
+    input.addEventListener('change', async () => {
+      const files = Array.from(input.files ?? []);
+      input.value = '';
+      if (!files.length) return;
+      try {
+        const d = await importScan(files, (m) => (this.msg.textContent = m));
+        this.msg.textContent = 'Kaydediliyor…';
+        await saveScan(d);
+        this.hooks.setScan(d);
+        this.p.useScan = true;
+        if (d.realHeight) this.p.height = Math.min(1.15, Math.max(0.85, d.realHeight / SCAN_HEIGHT));
+        this.msg.textContent = 'Tarama yüklendi. Önizlemede yüzü bize dönük değilse "180° çevir", yatıksa "Yatır / kaldır" düğmesini kullanın.';
+        this.syncInputs();
+        this.schedulePreview();
+      } catch (e) {
+        this.msg.textContent = (e as Error).message;
+      }
+    });
+    use.addEventListener('change', () => {
+      this.p.useScan = use.checked && !!this.hooks.getScan();
+      this.syncInputs();
+      this.schedulePreview();
+    });
+    this.el.querySelectorAll<HTMLButtonElement>('[data-scan-act]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const d = this.hooks.getScan();
+        if (!d) return;
+        const a = b.dataset.scanAct;
+        if (a === 'del') {
+          await deleteScan();
+          this.hooks.setScan(null);
+          this.p.useScan = false;
+        } else {
+          const r = rotateScan(d, a as 'y180' | 'x90');
+          await saveScan(r);
+          this.hooks.setScan(r);
+        }
+        this.syncInputs();
+        this.schedulePreview();
+      }),
+    );
+  }
+
   private setMode(m: 'face' | ColorSlot): void {
     this.mode = m;
     this.el.querySelectorAll<HTMLButtonElement>('.cr-modes button').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
@@ -256,8 +316,17 @@ export class Creator {
         const k = inp.dataset.k as keyof CustomProfile;
         inp.value = String(p[k]);
       });
-    (this.el.querySelector('[data-v=height]') as HTMLElement).textContent = `${Math.round(178 * p.height)} cm`;
+    (this.el.querySelector('[data-v=height]') as HTMLElement).textContent = `${Math.round(184 * p.height)} cm`;
     (this.el.querySelector('[data-v=build]') as HTMLElement).textContent = p.build < 0.95 ? 'İnce' : p.build < 1.1 ? 'Atletik' : p.build < 1.2 ? 'Güçlü' : 'İri';
     for (const sl of SLOTS) this.el.querySelector<HTMLInputElement>(`[data-sw=${sl.key}]`)!.value = p[sl.key];
+    const scan = this.hooks.getScan();
+    const use = this.el.querySelector<HTMLInputElement>('input[data-usescan]')!;
+    use.checked = p.useScan && !!scan;
+    use.disabled = !scan;
+    this.el.querySelectorAll<HTMLButtonElement>('[data-scan-act]').forEach((b) => (b.disabled = !scan));
+    this.el.querySelector('.cr-scan-info')!.textContent = scan
+      ? `${scan.sourceName} · ${Math.round(scan.sourceTriangles / 1000)}k → ${Math.round(scan.index.length / 3000)}k üçgen${scan.realHeight ? ` · ${Math.round(scan.realHeight * 100)} cm` : ''}`
+      : 'Tarama yok. Varsa önce taramayı, yoksa fotoğrafı kullanın.';
+    this.el.classList.toggle('scan-on', use.checked);
   }
 }

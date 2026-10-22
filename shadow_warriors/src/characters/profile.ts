@@ -27,6 +27,8 @@ export interface CustomProfile {
   height: number;
   /** 0.85 .. 1.3 */
   build: number;
+  /** Use the imported 3D body scan (IndexedDB) instead of the photo-based body. */
+  useScan: boolean;
 }
 
 const KEY = 'shadow-warriors-custom-v1';
@@ -48,6 +50,7 @@ export const defaultProfile = (): CustomProfile => ({
   sleeves: false,
   height: 1,
   build: 1,
+  useScan: false,
 });
 
 export function loadProfile(): CustomProfile | null {

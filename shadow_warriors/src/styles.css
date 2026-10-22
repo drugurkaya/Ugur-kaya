@@ -959,3 +959,54 @@ body {
   margin-left: auto;
   color: var(--dim);
 }
+
+.cr-scan {
+  border: 1px solid var(--line);
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.cr-scan .cr-file {
+  margin-bottom: 6px;
+}
+.cr-scan-info {
+  color: var(--dim);
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.cr-scan-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+}
+.cr-scan-tools label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: auto;
+}
+.cr-scan-tools button {
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  padding: 4px 7px;
+  cursor: pointer;
+}
+.cr-scan-tools button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+/* With a scan in use, the photo-based body controls don't apply. */
+.creator.scan-on .cr-photo,
+.creator.scan-on .cr-modes,
+.creator.scan-on .cr-hint,
+.creator.scan-on .cr-photo-file,
+.creator.scan-on .cr-row:has([data-k='faceR']),
+.creator.scan-on .cr-row:has([data-k='build']),
+.creator.scan-on .cr-row:has([data-k='hairStyle']),
+.creator.scan-on .cr-row:has([data-k='sleeves']) {
+  display: none;
+}
