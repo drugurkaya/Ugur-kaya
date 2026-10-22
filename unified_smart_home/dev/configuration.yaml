@@ -1,0 +1,38 @@
+# GELİŞTİRME / TEST yapılandırması — GERÇEK EV İÇİN DEĞİLDİR.
+# Buradaki tüm cihazlar Home Assistant'ın resmî "demo" entegrasyonundan gelir ve SİMÜLASYONDUR.
+# Testler bu yapılandırma ile 127.0.0.1 üzerinde geçici bir dizinde çalışan gerçek bir HA çekirdeği kullanır.
+homeassistant:
+  name: Test Evi (SİMÜLASYON)
+  latitude: 41.015
+  longitude: 28.979
+  elevation: 40
+  unit_system: metric
+  time_zone: Europe/Istanbul
+  country: TR
+  currency: TRY
+  language: tr
+  packages:
+    unified_smart_home: !include packages/unified_smart_home.yaml
+
+http:
+  server_host: 127.0.0.1
+  server_port: !env_var USH_HA_PORT 8123
+  login_attempts_threshold: 50
+
+api:
+auth:
+config:
+onboarding:
+websocket_api:
+search:
+system_health:
+recorder:
+  purge_keep_days: 3
+history:
+logbook:
+energy:
+backup:
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+demo:

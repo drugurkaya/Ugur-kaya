@@ -1,0 +1,103 @@
+# Unified Smart Home — Home Assistant paketi
+#
+# Kurulum: bu dosyayı HA yapılandırma klasöründe /config/packages/unified_smart_home.yaml olarak kopyalayın
+# ve configuration.yaml içine şunu ekleyin (zaten varsa yalnızca satırı ekleyin):
+#
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# Bu paket mevcut otomasyonlarınızı DEĞİŞTİRMEZ; yalnızca aşağıdaki yardımcıları ve tek bir bildirim
+# otomasyonunu ekler. Kaldırmak için dosyayı silip HA'yı yeniden başlatmanız yeterlidir.
+#
+# iPhone'a anlık bildirim (push) için Home Assistant Companion uygulaması gerekir. Uygulama kurulup
+# giriş yapıldığında HA'da notify.mobile_app_<telefon_adı> servisi oluşur; bu servisin adını
+# input_text.ush_push_target yardımcısına yazın. Boş bırakılırsa yalnızca HA içi bildirim oluşturulur.
+
+input_number:
+  ush_offline_notify_minutes:
+    name: "USH: Çevrim dışı bildirimi gecikmesi"
+    min: 1
+    max: 120
+    step: 1
+    unit_of_measurement: dk
+    icon: mdi:timer-alert-outline
+
+input_boolean:
+  ush_notifications_enabled:
+    name: "USH: Bildirimler açık"
+    icon: mdi:bell-ring-outline
+
+input_text:
+  ush_push_target:
+    name: "USH: Push bildirim servisi (ör. mobile_app_iphone)"
+    max: 100
+    icon: mdi:cellphone-message
+
+template:
+  - sensor:
+      # Kontrol edilebilir / izlenebilir cihaz varlıklarından "unavailable" olanların sayısı.
+      # "states" üzerinde dolaşan şablonlar HA tarafından dakikada en fazla bir kez yeniden hesaplanır.
+      - name: "USH Çevrim dışı varlıklar"
+        unique_id: ush_unavailable_entities
+        icon: mdi:lan-disconnect
+        state: >-
+          {{ states
+             | selectattr('domain', 'in', ['light','switch','sensor','binary_sensor','climate','cover','lock','fan','alarm_control_panel','valve','water_heater','humidifier'])
+             | selectattr('state', 'eq', 'unavailable')
+             | list | count }}
+        attributes:
+          entities: >-
+            {{ states
+               | selectattr('domain', 'in', ['light','switch','sensor','binary_sensor','climate','cover','lock','fan','alarm_control_panel','valve','water_heater','humidifier'])
+               | selectattr('state', 'eq', 'unavailable')
+               | map(attribute='entity_id') | list }}
+
+automation:
+  # Yeni çevrim dışı kalan varlıkları, ayarlanan süre boyunca çevrim dışı kalırlarsa TEK bildirimle bildirir.
+  # Aynı varlık yeniden çevrim içi olmadan ikinci kez bildirilmez (yalnızca listeye yeni girenler bildirilir).
+  - id: ush_device_offline_notify
+    alias: "USH: Cihaz çevrim dışı bildirimi"
+    description: "Unified Smart Home paketi tarafından eklendi."
+    mode: queued
+    max: 10
+    triggers:
+      - trigger: state
+        entity_id: sensor.ush_cevrim_disi_varliklar
+        attribute: entities
+    conditions:
+      - condition: state
+        entity_id: input_boolean.ush_notifications_enabled
+        state: "on"
+      - condition: template
+        value_template: >-
+          {{ trigger.to_state is not none and trigger.from_state is not none
+             and (trigger.to_state.attributes.entities | default([]) | reject('in', trigger.from_state.attributes.entities | default([])) | list | count) > 0 }}
+    actions:
+      - variables:
+          newly_offline: >-
+            {{ trigger.to_state.attributes.entities | default([])
+               | reject('in', trigger.from_state.attributes.entities | default([])) | list }}
+      - delay:
+          minutes: "{{ states('input_number.ush_offline_notify_minutes') | int(15) }}"
+      - variables:
+          still_offline: "{{ newly_offline | select('is_state', 'unavailable') | list }}"
+          names: >-
+            {{ newly_offline | select('is_state', 'unavailable')
+               | map('state_attr', 'friendly_name') | map('default', '?') | join(', ') }}
+      - condition: template
+        value_template: "{{ still_offline | count > 0 }}"
+      - action: persistent_notification.create
+        data:
+          notification_id: "ush_offline_{{ now().timestamp() | int }}"
+          title: "Cihaz çevrim dışı"
+          message: >-
+            {{ names }} {{ states('input_number.ush_offline_notify_minutes') | int(15) }} dakikadır yanıt vermiyor.
+      - if:
+          - condition: template
+            value_template: "{{ states('input_text.ush_push_target') | trim not in ['', 'unknown', 'unavailable'] }}"
+        then:
+          - action: "notify.{{ states('input_text.ush_push_target') | trim }}"
+            continue_on_error: true
+            data:
+              title: "Cihaz çevrim dışı"
+              message: "{{ names }} yanıt vermiyor."

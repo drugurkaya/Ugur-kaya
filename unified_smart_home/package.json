@@ -1,0 +1,19 @@
+{
+  "name": "unified-smart-home",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Home Assistant merkezli, iPhone uyumlu akıllı ev arayüzü (PWA)",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/unit/*.test.mjs",
+    "test:all": "bash scripts/run_tests.sh",
+    "lint": "eslint app/js tests",
+    "format": "prettier --write app tests"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
