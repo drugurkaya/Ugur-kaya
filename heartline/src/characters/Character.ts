@@ -153,14 +153,6 @@ export class Character {
     torso.scale.multiplyScalar(s);
     torso.position.y = 0.13 * s;
     chest.add(torso);
-    if (fem) {
-      for (const sx of [-1, 1]) {
-        const bust = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 10), this.mats.top);
-        bust.position.set(sx * 0.055 * s, 0.14 * s, 0.085 * s);
-        bust.scale.set(1, 0.85, 0.75);
-        chest.add(bust);
-      }
-    }
     const neckM = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.052, 0.11, 12), skinM);
     neckM.scale.setScalar(s);
     neckM.position.y = 0.01 * s;

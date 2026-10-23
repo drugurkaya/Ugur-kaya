@@ -27,6 +27,8 @@ export class HomeArea extends Area {
 
   build() {
     this.ambience = 'home';
+    this.grade = { tint: [0.9, 0.96, 1.1], lift: [0.0, 0.01, 0.03], contrast: 0.2, saturation: 0.9 };
+    this.fog = { color: 0x0a0f1e, density: 0.035 };
     const g = this.group;
     const c = this.colliders;
     const wallBed = mat(0xffffff, { map: paint(0xb9b0a6) });
@@ -63,6 +65,8 @@ export class HomeArea extends Area {
     moon.shadow.camera.bottom = -6;
     moon.shadow.bias = -0.0005;
     g.add(moon, moon.target);
+    // Moonlight falling through the bedroom window.
+    this.lightBeam(new THREE.Vector3(-5.4, 2.0, 0.4), new THREE.Vector3(-3.2, 0.0, 0.2), 0.55, 1.1, 0x6f8fff, 0.16);
     const east = new THREE.DirectionalLight(0xffb48a, 0.0);
     east.position.set(14, 4, -1);
     east.target.position.set(4, 0, 0);

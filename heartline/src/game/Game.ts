@@ -271,6 +271,9 @@ export class Game {
     this.area = area;
     this.scene.add(area.group);
     this.scene.background = area.background;
+    const preset = PRESETS[this.settings.data.quality];
+    this.scene.fog = area.fog && preset.atmosphere ? new THREE.FogExp2(area.fog.color, area.fog.density) : null;
+    this.renderer.setGrade(area.grade);
     this.renderer.gl.toneMappingExposure = area.exposure;
     this.scene.add(this.player.root);
     this.player.root.visible = true;
@@ -667,7 +670,7 @@ export class Game {
   private shot(name: string | null) {
     this.shotName = name;
     if (!name) return this.rig.setShot(null);
-    this.rig.setShot(this.resolveShot(name));
+    this.rig.setShot(this.resolveShot(name), name);
   }
 
   private resolveShot(name: string): Shot | null {
@@ -865,7 +868,7 @@ export class Game {
     if (s && !paused) this.updateGame(dt);
     if (this.inMenu) {
       this.menuT += dt;
-      this.rig.setShot({ pos: new THREE.Vector3(-0.8 + Math.sin(this.menuT * 0.1) * 0.4, 1.9, 1.2), target: new THREE.Vector3(-2.6, 0.7, -1.4), fov: 45 });
+      this.rig.setShot({ pos: new THREE.Vector3(-0.8 + Math.sin(this.menuT * 0.1) * 0.4, 1.9, 1.2), target: new THREE.Vector3(-2.6, 0.7, -1.4), fov: 45 }, 'menu');
     }
     // Character and area animation run even when paused for the menu backdrop.
     if (!modal) {
@@ -873,11 +876,15 @@ export class Game {
       this.area?.update(dt, this.player.root.position);
       ui.tick(dt);
     }
-    if (this.shotName && !this.inMenu && this.stats.frames % 3 === 0) this.rig.setShot(this.resolveShot(this.shotName));
+    if (this.shotName && !this.inMenu && this.stats.frames % 3 === 0) this.rig.setShot(this.resolveShot(this.shotName), this.shotName);
     if (input.lookDX || input.lookDY) this.rig.orbit(input.lookDX, input.lookDY, this.settings.data.lookSensitivity, this.settings.data.invertY);
     if (input.zoom) this.rig.zoomBy(input.zoom);
     this.rig.update(dt, this.cameraTarget(), this.area?.blockers ?? []);
-    this.renderer.render(this.scene, this.rig.camera, this.stats.time);
+    this.renderer.fx.dof = this.inMenu ? 0 : this.rig.dof;
+    this.renderer.fx.focus = this.rig.focus;
+    // Letterbox bars during dialogue and cinematic shots.
+    ui.setCinema(!this.inMenu && !!this.state && (!!this.engine?.active || !!this.shotName) && !ui.modalOpen);
+    this.renderer.render(this.scene, this.rig.camera, this.stats.time, dt);
     input.endFrame();
   }
 

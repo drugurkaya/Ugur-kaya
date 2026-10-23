@@ -12,7 +12,7 @@ const browser = await chromium.launch({ executablePath: exe, args: ['--use-angle
 
 async function session(viewport, extra = {}) {
   const page = await browser.newPage({ viewport, ...extra });
-  await page.addInitScript((q) => localStorage.setItem('heartline-settings-v1', JSON.stringify({ quality: q, lang: 'tr', textSpeed: 3 })), quality);
+  await page.addInitScript((q) => localStorage.setItem('heartline-settings-v1', JSON.stringify({ quality: q, lang: 'tr', textSpeed: 3, v: 2 })), quality);
   page.on('pageerror', (e) => console.log('pageerror', e.message));
   await page.goto(base);
   await page.waitForFunction(() => window.__game && window.__game.inMenu, null, { timeout: 120000 });

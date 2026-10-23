@@ -67,6 +67,35 @@ button {
 .ui > * {
   pointer-events: auto;
 }
+.ui::before,
+.ui::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--bar, 8vh);
+  background: #000;
+  z-index: 5;
+  pointer-events: none;
+  transition: transform 0.9s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ui::before {
+  top: 0;
+  transform: translateY(-100%);
+}
+.ui::after {
+  bottom: 0;
+  transform: translateY(100%);
+}
+.ui.cinema::before,
+.ui.cinema::after {
+  transform: translateY(0);
+}
+@media (max-height: 500px) {
+  .ui {
+    --bar: 6vh;
+  }
+}
 .fade {
   position: absolute;
   inset: 0;

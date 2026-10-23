@@ -16,7 +16,7 @@ career.
 | **The patient's family** | **Patient journal** | **Phone-sized touch layout** |
 | ![Family](docs/family.jpg) | ![Journal](docs/journal.jpg) | ![Mobile](docs/mobile-ringing.jpg) |
 
-*Screenshots were captured in a GPU-less container with software WebGL (SwiftShader).*
+*Screenshots: Balanced preset (the default on phones), captured in a GPU-less container with software WebGL (SwiftShader).*
 
 ## Contents
 
@@ -154,6 +154,12 @@ have been produced or tested. The repository already contained a Three.js + Type
   voices installed on the device; there is no recorded voice acting.
 
 This keeps the project free of licensing questions, but it is **stylised, not photorealistic**.
+
+**Cinematic rendering** (Balanced and Quality presets): letterbox bars in dialogue and cutscenes,
+depth of field in close-ups, slow camera push-ins, per-location colour grading (night blue at
+home, cold theatre, warm office), depth haze, moonlight and surgical-lamp light beams, multisampled
+anti-aliasing with post-processing, bloom, and ambient occlusion on Quality. Phones (e.g. iPhone 16)
+default to Balanced.
 
 ## Tests
 

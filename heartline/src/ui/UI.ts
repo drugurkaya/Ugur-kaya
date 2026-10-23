@@ -213,6 +213,11 @@ export class UI {
     if (label) this.promptEl.textContent = (this.game.touch ? '✋ ' : 'E · ') + label;
   }
 
+  /** Cinematic letterbox bars. */
+  setCinema(on: boolean) {
+    if (this.root.classList.contains('cinema') !== on) this.root.classList.toggle('cinema', on);
+  }
+
   setHudVisible(on: boolean) {
     show(this.hud, on);
   }

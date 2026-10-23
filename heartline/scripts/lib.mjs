@@ -13,7 +13,7 @@ export async function openGame(base, out, quality = 'performance') {
   const page = await browser.newPage({ viewport: { width: Number(process.env.E2E_W ?? 800), height: Number(process.env.E2E_H ?? 450) } });
   await page.addInitScript((q) => {
     try {
-      if (!localStorage.getItem('heartline-settings-v1')) localStorage.setItem('heartline-settings-v1', JSON.stringify({ quality: q, lang: 'tr', textSpeed: 3 }));
+      if (!localStorage.getItem('heartline-settings-v1')) localStorage.setItem('heartline-settings-v1', JSON.stringify({ quality: q, lang: 'tr', textSpeed: 3, v: 2 }));
     } catch {}
   }, quality);
   const errors = [];

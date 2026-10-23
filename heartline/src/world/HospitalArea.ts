@@ -23,6 +23,8 @@ export class HospitalArea extends Area {
   build() {
     this.ambience = 'hospital';
     this.exposure = 0.82;
+    this.grade = { tint: [0.95, 1.02, 1.03], contrast: 0.18, saturation: 0.88 };
+    this.fog = { color: 0xcfd8dc, density: 0.008 };
     const g = this.group;
     const c = this.colliders;
     const lino = mat(0xffffff, { map: linoleum(0xb9c4c6, [6, 6]), roughness: 0.22, metalness: 0.0 });

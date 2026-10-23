@@ -17,6 +17,8 @@ export class CarArea extends Area {
   build() {
     this.walkable = false;
     this.ambience = 'car';
+    this.grade = { tint: [0.92, 0.95, 1.1], lift: [0.01, 0.0, 0.03], contrast: 0.22, saturation: 0.95 };
+    this.fog = { color: 0x1b2036, density: 0.012 };
     const g = this.group;
     const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 12), new THREE.MeshBasicMaterial({ map: skyGradient(0.35), side: THREE.BackSide, fog: false }));
     g.add(sky);

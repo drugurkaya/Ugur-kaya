@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Character } from '../characters/Character';
 import { CAST } from '../characters/cast';
 import type { PRESETS } from '../core/Settings';
+import type { Grade } from '../render/Renderer';
 import type { GameState } from '../state/GameState';
 import type { LText } from '../state/types';
 import type { Collider } from './kit';
@@ -49,6 +50,10 @@ export abstract class Area {
   background = new THREE.Color(0x05070c);
   /** Tone-mapping exposure for this place (bright clinical rooms need less). */
   exposure = 1;
+  /** Colour grade for this place (applied by the post-processing pass). */
+  grade: Grade = { tint: [1, 1, 1] };
+  /** Depth haze: colour and density (0 = none). Only on presets with atmosphere. */
+  fog: { color: number; density: number } | null = null;
 
   constructor(protected ctx: AreaContext) {}
 
@@ -77,6 +82,48 @@ export abstract class Area {
       const target = inside ? rl.on : 0;
       rl.light.intensity += (target - rl.light.intensity) * Math.min(1, dt * 3);
     }
+  }
+
+  /**
+   * A soft additive beam of light (window moonlight, surgical lamp cones). Only on presets with
+   * atmosphere; returns null otherwise.
+   */
+  protected lightBeam(from: THREE.Vector3, to: THREE.Vector3, radiusTop: number, radiusBottom: number, color: number, opacity: number): THREE.Mesh | null {
+    if (!this.ctx.preset.atmosphere) return null;
+    const len = from.distanceTo(to);
+    const geo = new THREE.CylinderGeometry(radiusTop, radiusBottom, len, 24, 1, true);
+    const mat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      uniforms: { uColor: { value: new THREE.Color(color) }, uOpacity: { value: opacity } },
+      vertexShader: /* glsl */ `
+        varying float vY; varying vec3 vN; varying vec3 vView;
+        void main() {
+          vY = uv.y;
+          vN = normalize(normalMatrix * normal);
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vView = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform vec3 uColor; uniform float uOpacity;
+        varying float vY; varying vec3 vN; varying vec3 vView;
+        void main() {
+          float rim = pow(abs(dot(normalize(vN), normalize(vView))), 1.6);
+          float fade = smoothstep(0.0, 0.6, vY);
+          gl_FragColor = vec4(uColor * uOpacity * rim * fade, 1.0);
+        }`,
+    });
+    const m = new THREE.Mesh(geo, mat);
+    m.position.copy(from).add(to).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), from.clone().sub(to).normalize());
+    m.renderOrder = 10;
+    m.castShadow = false;
+    m.receiveShadow = false;
+    this.group.add(m);
+    return m;
   }
 
   /** Collect wall meshes as camera blockers after build. */

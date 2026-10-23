@@ -15,6 +15,9 @@ export class CameraRig {
   private look = new THREE.Vector3();
   private shot: Shot | null = null;
   private shotBlend = 0;
+  private shotKey = '';
+  /** Seconds spent in the current shot; drives the slow cinematic push-in. */
+  private shotTime = 0;
   shake = 0;
   private t = 0;
   reduceMotion = false;
@@ -23,8 +26,19 @@ export class CameraRig {
     this.camera = new THREE.PerspectiveCamera(55, aspect, 0.03, 400);
   }
 
-  setShot(s: Shot | null) {
+  /** `key` identifies the shot: re-solving the same shot keeps its push-in going. */
+  setShot(s: Shot | null, key = '') {
+    if (key !== this.shotKey) this.shotTime = 0;
+    this.shotKey = s ? key : '';
     this.shot = s;
+  }
+
+  /** How much depth of field to apply (close-ups only) and where to focus. */
+  get dof() {
+    return this.shot && !this.reduceMotion ? this.shotBlend : 0;
+  }
+  get focus() {
+    return this.camera.position.distanceTo(this.look);
   }
 
   get inShot() {
@@ -38,6 +52,7 @@ export class CameraRig {
 
   update(dt: number, target: THREE.Vector3, blockers: THREE.Object3D[]) {
     this.t += dt;
+    if (this.shot) this.shotTime += Math.min(dt, 0.1);
     // Orbit pose
     const off = new THREE.Vector3(Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), Math.cos(this.yaw) * Math.cos(this.pitch));
     let dist = this.distance;
@@ -57,14 +72,18 @@ export class CameraRig {
     let l = orbitLook;
     let fov = 55;
     if (this.shot) {
-      p = orbitPos.clone().lerp(this.shot.pos, this.shotBlend);
+      // Slow dolly-in towards the subject while a shot holds (up to 9% of the distance).
+      const push = this.reduceMotion ? 0 : Math.min(0.09, this.shotTime * 0.01);
+      const shotPos = this.shot.pos.clone().lerp(this.shot.target, push);
+      p = orbitPos.clone().lerp(shotPos, this.shotBlend);
       l = orbitLook.clone().lerp(this.shot.target, this.shotBlend);
-      fov = 55 + ((this.shot.fov ?? 45) - 55) * this.shotBlend;
+      fov = 55 + ((this.shot.fov ?? 45) - 55) * this.shotBlend - push * 12;
     } else if (this.shotBlend > 0.001) {
       p = orbitPos.clone().lerp(this.pos, this.shotBlend);
       l = orbitLook.clone().lerp(this.look, this.shotBlend);
     }
-    const k = dt >= 1 ? 1 : 1 - Math.exp(-12 * dt);
+    // Glide between cinematic shots; follow the player tightly while exploring.
+    const k = dt >= 1 ? 1 : 1 - Math.exp(-(this.shot ? 4.5 : 12) * dt);
     this.pos.lerp(p, k);
     this.look.lerp(l, k);
     if (dt >= 1) {

@@ -13,6 +13,8 @@ export class ORArea extends Area {
     this.walkable = false;
     this.ambience = 'or';
     this.exposure = 0.85;
+    this.grade = { tint: [0.9, 1.0, 1.06], lift: [0.0, 0.015, 0.02], contrast: 0.22, saturation: 0.85 };
+    this.fog = { color: 0x9fb8b8, density: 0.02 };
     const g = this.group;
     const c = this.colliders;
     const floor = mat(0xffffff, { map: linoleum(0x8a9a9c, [4, 4]), roughness: 0.25 });
@@ -62,6 +64,7 @@ export class ORArea extends Area {
       sp.shadow.mapSize.setScalar(this.ctx.preset.shadowSize / 2);
       g.add(sp, sp.target);
       this.lampLights.push(sp);
+      this.lightBeam(new THREE.Vector3(x, 2.15, z), new THREE.Vector3(x * 0.3, 1.05, z * 0.3 - 0.1), 0.26, 0.42, 0xfff6e8, 0.08);
     }
 
     // Anaesthesia machine with the live monitor
@@ -129,6 +132,7 @@ export class OfficeArea extends Area {
   build() {
     this.walkable = false;
     this.ambience = 'office';
+    this.grade = { tint: [1.06, 1.0, 0.92], contrast: 0.14, saturation: 1.05 };
     const g = this.group;
     const c = this.colliders;
     g.add(room({ x: 0, z: 0, w: 5, d: 4.5, h: 2.8, floor: mat(0x6a5440, { roughness: 0.5 }), wall: mat(0xe4ddd0), ceiling: mat(0xf0eee8), windows: { n: [[0.6, 2.2, 0.9, 1.4]] } }, c));
